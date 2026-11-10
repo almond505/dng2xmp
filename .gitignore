@@ -2,3 +2,4 @@
 .claude/
 .taste-skill/
 fixtures/
+__pycache__/
