@@ -1,0 +1,1857 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'unsafe-inline'; img-src data: blob:; connect-src 'none'; form-action 'none'; base-uri 'none'">
+<meta name="referrer" content="no-referrer">
+<title>DNG → XMP Preset Converter</title>
+<meta name="description" content="Turn Lightroom-edited DNG files into importable .xmp presets. Runs entirely in your browser; nothing is uploaded.">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#161616">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23252525'/%3E%3Cpath d='M7 24 C 13 24, 14 9, 25 8' stroke='%2331A8FF' stroke-width='3' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
+<style>
+/* Lightroom-style palette: charcoal panels, neutral greys, Lightroom blue accent.
+   Dark is the default; light mirrors Lightroom's light grey panels. */
+:root{
+  --bg:#1B1B1B; --surface:#252525; --surface-2:#2C2C2C; --raised:#323232; --sunken:#161616;
+  --ink:#E6E6E6; --ink-2:#BDBDBD; --muted:#8C8C8C; --line:#333333; --line-strong:#454545;
+  --accent:#31A8FF; --accent-hover:#5CBBFF; --accent-ink:#001E36; --accent-soft:rgba(49,168,255,.13); --accent-line:rgba(49,168,255,.55);
+  --track:#4A4A4A; --thumb:#D9D9D9;
+  --ok:#5BC98A; --ok-soft:rgba(91,201,138,.12); --warn:#F2B14C; --warn-soft:rgba(242,177,76,.10); --err:#FF7B70; --err-soft:rgba(255,123,112,.10);
+  --focus:#31A8FF;
+  --r:6px; --r-sm:4px;
+  --shadow:0 1px 0 rgba(255,255,255,.03) inset, 0 8px 24px -12px rgba(0,0,0,.6);
+  --font:ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,"Helvetica Neue",Arial,sans-serif;
+  --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+  --gutter:16px;
+  color-scheme:dark;
+}
+:root[data-theme="light"]{
+  --bg:#E9E9E9; --surface:#F6F6F6; --surface-2:#EFEFEF; --raised:#FFFFFF; --sunken:#DEDEDE;
+  --ink:#1E1E1E; --ink-2:#3B3B3B; --muted:#6A6A6A; --line:#D2D2D2; --line-strong:#BDBDBD;
+  --accent:#1473E6; --accent-hover:#0D66D0; --accent-ink:#FFFFFF; --accent-soft:rgba(20,115,230,.10); --accent-line:rgba(20,115,230,.5);
+  --track:#BDBDBD; --thumb:#4B4B4B;
+  --ok:#1D7A45; --ok-soft:rgba(29,122,69,.10); --warn:#8A5300; --warn-soft:rgba(176,108,0,.10); --err:#C42B1C; --err-soft:rgba(196,43,28,.08);
+  --focus:#1473E6;
+  --shadow:0 1px 0 rgba(255,255,255,.7) inset, 0 6px 18px -12px rgba(0,0,0,.25);
+  color-scheme:light;
+}
+@media (prefers-color-scheme: light){
+  :root[data-theme="auto"]{
+    --bg:#E9E9E9; --surface:#F6F6F6; --surface-2:#EFEFEF; --raised:#FFFFFF; --sunken:#DEDEDE;
+    --ink:#1E1E1E; --ink-2:#3B3B3B; --muted:#6A6A6A; --line:#D2D2D2; --line-strong:#BDBDBD;
+    --accent:#1473E6; --accent-hover:#0D66D0; --accent-ink:#FFFFFF; --accent-soft:rgba(20,115,230,.10); --accent-line:rgba(20,115,230,.5);
+    --track:#BDBDBD; --thumb:#4B4B4B;
+    --ok:#1D7A45; --ok-soft:rgba(29,122,69,.10); --warn:#8A5300; --warn-soft:rgba(176,108,0,.10); --err:#C42B1C; --err-soft:rgba(196,43,28,.08);
+    --focus:#1473E6;
+    --shadow:0 1px 0 rgba(255,255,255,.7) inset, 0 6px 18px -12px rgba(0,0,0,.25);
+    color-scheme:light;
+  }
+}
+@media (min-width:768px){ :root{ --gutter:32px; } }
+
+*,*::before,*::after{ box-sizing:border-box; }
+html{ -webkit-text-size-adjust:100%; }
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font:14.5px/1.5 var(--font); letter-spacing:-.003em;
+  -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+  min-height:100vh; overflow-x:hidden;
+}
+h1,h2,h3,p{ margin:0; }
+button,input,select{ font:inherit; color:inherit; }
+a{ color:inherit; text-underline-offset:3px; text-decoration-thickness:1px; }
+a:hover{ text-decoration-color:var(--accent); }
+code,.mono{ font-family:var(--mono); font-size:.92em; }
+::selection{ background:var(--accent-soft); }
+:focus-visible{ outline:2px solid var(--focus); outline-offset:2px; border-radius:var(--r-sm); }
+.sr-only{ position:absolute!important; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; border:0; }
+.skip{ position:absolute; left:var(--gutter); top:-100px; z-index:10; background:var(--accent); color:var(--accent-ink); padding:10px 14px; border-radius:var(--r); text-decoration:none; font-weight:600; }
+.skip:focus{ top:12px; }
+
+.wrap{ width:100%; max-width:1240px; margin:0 auto; padding-inline:var(--gutter); }
+
+/* ---------- top bar (identity plate) ---------- */
+.bar{ background:var(--sunken); border-bottom:1px solid var(--line); }
+.bar .wrap{ display:flex; align-items:center; justify-content:space-between; gap:12px; min-height:56px; }
+.mark{ display:flex; align-items:center; gap:10px; text-decoration:none; }
+.mark svg{ flex:none; }
+.mark-name{ display:flex; flex-direction:column; line-height:1.15; }
+.mark-name b{ font-size:14px; font-weight:650; letter-spacing:-.01em; }
+.mark-name span{ font-size:11px; color:var(--muted); letter-spacing:.02em; }
+.bar-right{ display:flex; align-items:center; gap:6px; }
+.local{ display:inline-flex; align-items:center; gap:8px; font-size:12px; color:var(--ink-2); padding:0 12px; height:30px; border:1px solid var(--line); border-radius:999px; background:var(--surface); }
+.local i{ width:6px; height:6px; border-radius:50%; background:var(--ok); box-shadow:0 0 0 3px var(--ok-soft); }
+
+/* ---------- buttons ---------- */
+.btn{
+  --b-bg:var(--raised); --b-ink:var(--ink); --b-line:var(--line-strong);
+  display:inline-flex; align-items:center; justify-content:center; gap:8px;
+  min-height:38px; padding:0 15px; border-radius:var(--r);
+  background:var(--b-bg); color:var(--b-ink); border:1px solid var(--b-line);
+  font-weight:560; font-size:13.5px; line-height:1; cursor:pointer; white-space:nowrap;
+  transition:transform .14s ease, background-color .14s ease, border-color .14s ease, box-shadow .14s ease, opacity .14s;
+  text-decoration:none; user-select:none;
+}
+.btn:hover:not(:disabled){ transform:translateY(-1px); border-color:var(--muted); }
+.btn:active:not(:disabled){ transform:translateY(0) scale(.98); }
+.btn:disabled{ opacity:.4; cursor:not-allowed; }
+.btn.primary{ --b-bg:var(--accent); --b-ink:var(--accent-ink); --b-line:transparent; box-shadow:0 6px 16px -8px var(--accent-line); }
+.btn.primary:hover:not(:disabled){ --b-bg:var(--accent-hover); border-color:transparent; box-shadow:0 8px 20px -8px var(--accent-line); }
+.btn.ghost{ --b-bg:transparent; --b-line:transparent; color:var(--ink-2); }
+.btn.ghost:hover:not(:disabled){ color:var(--ink); background:var(--surface-2); border-color:transparent; }
+.btn.sm{ min-height:30px; padding:0 10px; font-size:12.5px; }
+.btn.icon{ width:38px; padding:0; }
+.btn.icon.sm{ width:30px; }
+.btn svg{ flex:none; }
+
+/* ---------- intro ---------- */
+.intro{ padding-block:48px 36px; }
+.intro .wrap{ display:grid; grid-template-columns:minmax(0,1fr); gap:32px; align-items:center; }
+@media (min-width:960px){ .intro .wrap{ grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr); gap:56px; } }
+.eyebrow{ display:inline-flex; align-items:center; gap:8px; font-size:12px; font-weight:560; color:var(--accent); margin-bottom:16px; }
+.eyebrow::before{ content:""; width:16px; height:1.5px; background:currentColor; border-radius:2px; }
+h1{ font-size:clamp(32px,4.6vw,52px); line-height:1.02; letter-spacing:-.035em; font-weight:700; max-width:15ch; text-wrap:balance; }
+h1 .dim{ color:var(--muted); }
+.lede{ margin-top:18px; color:var(--ink-2); font-size:16px; line-height:1.55; max-width:50ch; text-wrap:pretty; }
+.lede strong{ color:var(--ink); font-weight:600; }
+.facts{ margin:22px 0 0; padding:0; list-style:none; display:flex; flex-wrap:wrap; gap:8px 20px; font-size:13px; color:var(--ink-2); }
+.facts li{ display:inline-flex; align-items:center; gap:8px; }
+.facts svg{ color:var(--accent); }
+
+/* Develop panel mock: the real thing being converted */
+.dev{ border:1px solid var(--line); border-radius:10px; background:var(--surface); box-shadow:var(--shadow); overflow:hidden; }
+.dev-head{ display:flex; align-items:center; justify-content:space-between; gap:12px; height:38px; padding:0 14px; border-bottom:1px solid var(--line); background:var(--surface-2); }
+.dev-head b{ font-size:12.5px; font-weight:620; letter-spacing:.01em; display:inline-flex; align-items:center; gap:8px; }
+.dev-head b::before{ content:""; width:0; height:0; border-left:4px solid transparent; border-right:4px solid transparent; border-top:5px solid var(--muted); }
+.dev-file{ font-family:var(--mono); font-size:11.5px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.dev-body{ padding:10px 14px 14px; display:grid; gap:2px; }
+.dev-sub{ font-size:11px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); padding:8px 0 4px; }
+.dev .sl{ cursor:default; border-radius:var(--r-sm); margin-inline:-6px; padding-inline:6px; transition:background-color .14s; }
+.dev .sl:hover, .dev .sl.on{ background:var(--accent-soft); }
+.dev .sl:hover .sl-name, .dev .sl.on .sl-name{ color:var(--ink); }
+.dev-code{ display:flex; align-items:center; justify-content:space-between; gap:12px; padding:11px 14px; border-top:1px solid var(--line); background:var(--sunken); font-family:var(--mono); font-size:12px; }
+.dev-code code{ color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-size:12px; }
+.dev-code code .k{ color:var(--accent); }
+.dev-code span{ color:var(--muted); white-space:nowrap; }
+
+/* Slider rows (hero + file cards) */
+.sl{ display:grid; grid-template-columns:96px minmax(0,1fr) 48px; align-items:center; gap:12px; min-height:28px; font-size:12.5px; }
+.sl-name{ color:var(--ink-2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.sl-val{ font-family:var(--mono); font-size:12px; text-align:right; color:var(--ink); font-variant-numeric:tabular-nums; }
+.sl-track{ position:relative; height:2px; background:var(--track); border-radius:2px; }
+.sl-track::before{ content:""; position:absolute; left:50%; top:-3px; width:1px; height:8px; background:var(--track); }
+.sl-fill{ position:absolute; top:0; bottom:0; left:var(--a,50%); width:var(--w,0%); background:var(--accent); border-radius:2px; transition:left .7s cubic-bezier(.2,.8,.2,1), width .7s cubic-bezier(.2,.8,.2,1); }
+.sl-thumb{ position:absolute; top:50%; left:var(--p,50%); width:11px; height:11px; margin:-5.5px 0 0 -5.5px; border-radius:50%; background:var(--thumb); box-shadow:0 0 0 2px var(--surface), 0 1px 3px rgba(0,0,0,.4); transition:left .7s cubic-bezier(.2,.8,.2,1); }
+.sl.is-off{ opacity:.38; }
+.sl.is-off .sl-fill{ background:var(--muted); }
+
+/* ---------- layout ---------- */
+main{ padding-bottom:72px; }
+.grid{ display:grid; grid-template-columns:minmax(0,1fr); gap:28px; align-items:start; }
+@media (min-width:1024px){ .grid{ grid-template-columns:minmax(0,1fr) 320px; gap:32px; } .aside{ position:sticky; top:20px; } }
+
+/* ---------- workspace panel ---------- */
+.workspace{ border:1px solid var(--line); border-radius:10px; background:var(--surface); box-shadow:var(--shadow); padding:16px; }
+.drop{
+  position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px;
+  min-height:220px; padding:28px 20px; text-align:center;
+  border:1.5px dashed var(--line-strong); border-radius:8px;
+  background-color:var(--sunken);
+  background-image:linear-gradient(color-mix(in srgb,var(--line) 60%,transparent) 1px, transparent 1px), linear-gradient(90deg, color-mix(in srgb,var(--line) 60%,transparent) 1px, transparent 1px);
+  background-size:28px 28px; background-position:center;
+  transition:border-color .15s, background-color .15s;
+}
+.drop::after{ content:""; position:absolute; inset:0; border-radius:inherit; background:radial-gradient(ellipse at center, var(--sunken) 30%, transparent 75%); pointer-events:none; }
+.drop > *{ position:relative; z-index:1; }
+.drop:hover{ border-color:var(--muted); }
+.drop.over{ border-color:var(--accent); border-style:solid; background-color:var(--accent-soft); }
+.drop.over .drop-icon{ transform:translateY(-3px); color:var(--accent); border-color:var(--accent-line); }
+.drop-icon{ width:52px; height:52px; display:grid; place-items:center; border-radius:12px; background:var(--raised); border:1px solid var(--line-strong); color:var(--ink-2); transition:transform .2s ease, color .2s, border-color .2s; box-shadow:var(--shadow); }
+.drop h2{ font-size:18px; letter-spacing:-.015em; font-weight:640; margin-top:4px; }
+.drop p{ color:var(--muted); font-size:13px; }
+.drop-actions{ display:flex; gap:8px; flex-wrap:wrap; justify-content:center; margin-top:4px; }
+.formats{ display:flex; gap:6px; justify-content:center; }
+.formats span{ font-family:var(--mono); font-size:11px; color:var(--ink-2); padding:2px 7px; border-radius:4px; border:1px solid var(--line-strong); background:var(--surface); }
+
+/* ---------- toolbar ---------- */
+.toolbar{ margin-top:16px; display:grid; grid-template-columns:minmax(0,1fr); gap:12px; align-items:end; }
+@media (min-width:720px){ .toolbar{ grid-template-columns:minmax(0,300px) minmax(0,1fr); } }
+.field{ display:flex; flex-direction:column; gap:6px; min-width:0; }
+.field label,.label{ font-size:12px; font-weight:560; color:var(--ink-2); }
+.input{
+  width:100%; min-height:38px; padding:8px 11px; border-radius:var(--r);
+  background:var(--sunken); border:1px solid var(--line-strong); color:var(--ink);
+  transition:border-color .14s, box-shadow .14s;
+}
+.input:hover{ border-color:var(--muted); }
+.input:focus{ outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft); }
+.input[aria-invalid="true"]{ border-color:var(--err); }
+.hint{ font-size:11.5px; color:var(--muted); }
+.hint.err{ color:var(--err); }
+.tool-actions{ display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap; align-items:center; }
+.summary{ flex:1 1 100%; text-align:right; font-size:12.5px; color:var(--muted); font-variant-numeric:tabular-nums; }
+
+.progress{ margin-top:16px; border:1px solid var(--line); border-radius:var(--r); background:var(--sunken); padding:12px 14px; display:grid; grid-template-columns:minmax(0,1fr) auto; gap:10px 14px; align-items:center; }
+.progress[hidden]{ display:none; }
+.progress-text{ font-size:12.5px; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-variant-numeric:tabular-nums; }
+.progress-track{ grid-column:1 / -1; height:3px; border-radius:2px; background:var(--track); overflow:hidden; }
+.progress-fill{ height:100%; width:0; background:var(--accent); transition:width .2s ease; }
+
+.notices{ margin:12px 0 0; padding:0; list-style:none; display:grid; gap:6px; }
+.notices li{ font-size:12.5px; color:var(--ink-2); padding:8px 12px; border-radius:var(--r); background:var(--surface-2); border:1px solid var(--line); overflow-wrap:anywhere; }
+
+/* ---------- cards ---------- */
+.cards{ margin-top:20px; display:grid; gap:14px; }
+.empty[hidden]{ display:none; }
+.empty{ border:1px dashed var(--line-strong); border-radius:10px; padding:20px; color:var(--muted); font-size:13.5px; display:grid; grid-template-columns:auto minmax(0,1fr); gap:16px; align-items:center; }
+.card{ border:1px solid var(--line); border-radius:10px; background:var(--surface); box-shadow:var(--shadow); min-width:0; overflow:hidden; transition:border-color .2s; }
+.card:hover{ border-color:var(--line-strong); }
+.card.is-error{ border-color:color-mix(in srgb,var(--err) 40%,var(--line)); }
+.card-head{ display:grid; grid-template-columns:auto minmax(0,1fr) auto; gap:14px; padding:14px 16px; align-items:center; background:var(--surface-2); }
+.thumb{ width:58px; height:58px; border-radius:6px; background:var(--sunken); border:1px solid var(--line); display:grid; place-items:center; overflow:hidden; }
+.thumb svg{ width:100%; height:100%; display:block; }
+.thumb .tag{ font-family:var(--mono); font-size:11px; font-weight:600; color:var(--muted); }
+.card-title{ min-width:0; }
+.fname{ font-size:14px; font-weight:620; letter-spacing:-.01em; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.meta{ margin-top:6px; display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+.pill{ display:inline-flex; align-items:center; gap:5px; height:22px; padding:0 8px; border-radius:999px; font-size:11.5px; font-weight:560; background:var(--raised); color:var(--ink-2); border:1px solid var(--line); white-space:nowrap; max-width:100%; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+.pill.ok{ background:var(--ok-soft); color:var(--ok); border-color:transparent; }
+.pill.warn{ background:var(--warn-soft); color:var(--warn); border-color:transparent; }
+.pill.err{ background:var(--err-soft); color:var(--err); border-color:transparent; }
+.pill.accent{ background:var(--accent-soft); color:var(--accent); border-color:transparent; }
+.pill.line{ background:transparent; color:var(--muted); }
+.head-actions{ display:flex; gap:6px; align-items:center; }
+.card-body{ border-top:1px solid var(--line); padding:16px; display:grid; grid-template-columns:minmax(0,1fr); gap:16px; }
+.card-body > *{ min-width:0; }
+.name-row{ display:grid; grid-template-columns:minmax(0,1fr) auto; gap:12px; align-items:end; }
+.outname{ font-family:var(--mono); font-size:11.5px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding-bottom:11px; }
+
+.mini{ border:1px solid var(--line); border-radius:8px; background:var(--sunken); }
+.mini-head{ display:flex; justify-content:space-between; align-items:center; gap:10px; padding:9px 12px; border-bottom:1px solid var(--line); font-size:12px; font-weight:600; }
+.mini-head span{ font-weight:400; color:var(--muted); font-size:11.5px; }
+.mini-body{ padding:8px 12px 10px; display:grid; grid-template-columns:minmax(0,1fr); gap:0 28px; }
+@media (min-width:640px){ .mini-body{ grid-template-columns:repeat(2,minmax(0,1fr)); } }
+.mini .sl-thumb{ box-shadow:0 0 0 2px var(--sunken), 0 1px 3px rgba(0,0,0,.4); }
+
+.alerts{ display:grid; gap:8px; margin:0; padding:0; list-style:none; }
+.alerts[hidden]{ display:none; }
+.alert{ display:grid; grid-template-columns:16px minmax(0,1fr); gap:10px; padding:10px 12px; border-radius:var(--r); font-size:12.5px; line-height:1.5; background:var(--surface-2); border:1px solid var(--line); color:var(--ink-2); overflow-wrap:anywhere; }
+.alert svg{ margin-top:2px; }
+.alert.warn{ background:var(--warn-soft); border-color:color-mix(in srgb,var(--warn) 28%,transparent); color:var(--ink); }
+.alert.warn svg{ color:var(--warn); }
+.alert.err{ background:var(--err-soft); border-color:color-mix(in srgb,var(--err) 28%,transparent); color:var(--ink); }
+.alert.err svg{ color:var(--err); }
+.alert.info svg{ color:var(--muted); }
+
+.groups-head{ display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:10px; flex-wrap:wrap; }
+.chips{ display:flex; flex-wrap:wrap; gap:6px; }
+.chip{ position:relative; display:inline-flex; align-items:center; gap:8px; min-height:32px; padding:0 11px 0 8px; border-radius:999px; border:1px solid var(--line-strong); background:var(--raised); color:var(--ink-2); font-size:12.5px; cursor:pointer; user-select:none; transition:border-color .14s, background-color .14s, color .14s, transform .14s; }
+.chip:hover{ border-color:var(--muted); color:var(--ink); transform:translateY(-1px); }
+.chip:active{ transform:scale(.98); }
+.chip input{ position:absolute; opacity:0; pointer-events:none; }
+.chip .box{ position:relative; width:22px; height:13px; border-radius:999px; background:var(--track); transition:background-color .16s; flex:none; }
+.chip .box::after{ content:""; position:absolute; top:2px; left:2px; width:9px; height:9px; border-radius:50%; background:var(--surface); transition:transform .16s ease; }
+.chip .box svg{ display:none; }
+.chip .n{ font-family:var(--mono); font-size:11px; color:var(--muted); font-variant-numeric:tabular-nums; }
+.chip:has(input:checked){ border-color:var(--accent-line); background:var(--accent-soft); color:var(--ink); }
+.chip:has(input:checked) .box{ background:var(--accent); }
+.chip:has(input:checked) .box::after{ transform:translateX(9px); background:#fff; }
+.chip:has(input:focus-visible){ outline:2px solid var(--focus); outline-offset:2px; }
+.chip.is-empty{ opacity:.45; }
+.chip.is-empty:hover{ transform:none; }
+
+.packets{ display:grid; gap:6px; }
+.packet{ display:grid; grid-template-columns:auto minmax(0,1fr); gap:10px; align-items:center; padding:11px 12px; border:1px solid var(--line-strong); border-radius:var(--r); cursor:pointer; font-size:12.5px; background:var(--raised); transition:border-color .14s; }
+.packet:hover{ border-color:var(--muted); }
+.packet:has(input:checked){ border-color:var(--accent); background:var(--accent-soft); }
+.packet input{ accent-color:var(--accent); width:16px; height:16px; margin:0; }
+
+details.more{ border:1px solid var(--line); border-radius:8px; background:var(--surface-2); overflow:hidden; }
+details.more > summary{ list-style:none; cursor:pointer; display:flex; align-items:center; gap:8px; min-height:42px; padding:0 12px; font-size:13px; font-weight:560; }
+details.more > summary::-webkit-details-marker{ display:none; }
+details.more > summary .chev{ transition:transform .18s ease; color:var(--muted); }
+details.more[open] > summary .chev{ transform:rotate(90deg); }
+details.more > summary:hover{ background:var(--raised); }
+details.more > summary .sub{ margin-left:auto; font-weight:400; color:var(--muted); font-size:12px; }
+.table-scroll{ max-height:460px; overflow:auto; border-top:1px solid var(--line); -webkit-overflow-scrolling:touch; background:var(--surface); }
+table.settings{ width:100%; border-collapse:collapse; font-size:12px; }
+table.settings th, table.settings td{ text-align:left; padding:7px 12px; border-bottom:1px solid var(--line); vertical-align:top; }
+table.settings tbody tr:not(.ghead):hover td{ background:var(--surface-2); }
+table.settings tbody tr.ghead th{ position:sticky; top:0; z-index:1; background:var(--raised); font-size:11.5px; font-weight:620; padding-block:5px; letter-spacing:.01em; }
+.ghead-inner{ display:flex; align-items:center; gap:10px; justify-content:space-between; }
+.ghead-inner label{ display:inline-flex; align-items:center; gap:8px; cursor:pointer; min-height:28px; }
+.ghead-inner input{ accent-color:var(--accent); width:14px; height:14px; margin:0; }
+.ghead-inner .n{ font-family:var(--mono); font-weight:400; color:var(--muted); }
+td.k{ font-family:var(--mono); color:var(--ink-2); white-space:nowrap; }
+td.v{ font-family:var(--mono); color:var(--ink); overflow-wrap:anywhere; min-width:120px; }
+td.s{ white-space:nowrap; width:1%; }
+tr.is-off td.k, tr.is-off td.v{ color:var(--muted); }
+tr.is-excl td.k, tr.is-excl td.v{ color:var(--muted); text-decoration:line-through; text-decoration-color:color-mix(in srgb,var(--muted) 60%,transparent); }
+.reason{ display:block; margin-top:2px; font-family:var(--font); font-size:11px; color:var(--muted); text-decoration:none; }
+pre.preview{ margin:0; padding:12px; max-height:380px; overflow:auto; font:11.5px/1.6 var(--mono); color:var(--ink-2); border-top:1px solid var(--line); background:var(--sunken); white-space:pre; tab-size:2; }
+
+.card-foot{ display:flex; gap:10px; align-items:center; justify-content:space-between; flex-wrap:wrap; padding-top:2px; }
+.valid{ font-size:12px; color:var(--muted); display:inline-flex; align-items:center; gap:6px; }
+.valid.ok{ color:var(--ok); }
+.valid.err{ color:var(--err); }
+.foot-actions{ display:flex; gap:8px; flex-wrap:wrap; }
+
+/* ---------- aside ---------- */
+.panel{ border:1px solid var(--line); border-radius:10px; background:var(--surface); overflow:hidden; }
+.panel + .panel{ margin-top:12px; }
+.panel h2{ display:flex; align-items:center; gap:8px; font-size:12.5px; font-weight:620; letter-spacing:.01em; height:38px; padding:0 14px; background:var(--surface-2); border-bottom:1px solid var(--line); }
+.panel h2::before{ content:""; width:0; height:0; border-left:4px solid transparent; border-right:4px solid transparent; border-top:5px solid var(--muted); }
+.panel .pbody{ padding:12px 14px 14px; font-size:13px; color:var(--ink-2); display:grid; gap:10px; }
+.panel .pbody p{ text-wrap:pretty; }
+.how details{ border-top:1px solid var(--line); }
+.how details:first-of-type{ border-top:0; }
+.how summary{ list-style:none; cursor:pointer; display:flex; align-items:center; gap:10px; min-height:44px; padding:0 14px; font-size:13px; font-weight:560; }
+.how summary::-webkit-details-marker{ display:none; }
+.how summary .chev{ margin-left:auto; color:var(--muted); transition:transform .18s ease; }
+.how details[open] summary .chev{ transform:rotate(90deg); }
+.how summary:hover{ background:var(--surface-2); }
+.how ol{ margin:0; padding:0 14px 14px 34px; font-size:13px; color:var(--ink-2); display:grid; gap:6px; }
+.how ol li::marker{ color:var(--muted); font-variant-numeric:tabular-nums; }
+.how .appmark{ min-width:30px; height:20px; padding:0 5px; border-radius:4px; display:grid; place-items:center; font:600 10.5px/1 var(--mono); color:var(--ink-2); background:var(--raised); border:1px solid var(--line-strong); flex:none; }
+.kbd{ font-family:var(--mono); font-size:11.5px; padding:1px 5px; border-radius:3px; background:var(--raised); border:1px solid var(--line-strong); white-space:nowrap; }
+.limits{ margin:0; padding:0; list-style:none; display:grid; gap:6px; font-size:12px; }
+.limits li{ display:flex; justify-content:space-between; gap:12px; border-bottom:1px solid var(--line); padding-bottom:6px; }
+.limits li:last-child{ border-bottom:0; padding-bottom:0; }
+.limits b{ font-family:var(--mono); font-weight:500; color:var(--ink); white-space:nowrap; }
+
+footer{ border-top:1px solid var(--line); background:var(--sunken); padding-block:20px 32px; font-size:12px; color:var(--muted); }
+footer .wrap{ display:flex; gap:12px 24px; flex-wrap:wrap; justify-content:space-between; }
+
+/* ---------- phone ---------- */
+@media (max-width:640px){
+  .intro{ padding-block:28px 24px; }
+  .workspace{ padding:12px; }
+  .card-head{ align-items:start; gap:12px; padding:12px; }
+  .card-body{ padding:12px; }
+  .thumb{ width:48px; height:48px; }
+  .name-row{ grid-template-columns:minmax(0,1fr); }
+  .outname{ padding-bottom:0; }
+  .card-foot, .foot-actions, .tool-actions{ flex-direction:column; align-items:stretch; }
+  .foot-actions .btn, .tool-actions .btn{ width:100%; min-height:44px; }
+  .summary{ text-align:left; }
+  .local span{ display:none; }
+  .local{ padding:0 10px; }
+  .btn{ min-height:44px; }
+  .btn.sm{ min-height:40px; }
+  .btn.icon{ width:44px; }
+  .chip{ min-height:38px; }
+  .sl{ grid-template-columns:84px minmax(0,1fr) 44px; gap:10px; }
+  .dev-body > :nth-child(n+8){ display:none; }
+  td.v{ min-width:100px; }
+}
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{ animation:none!important; transition:none!important; }
+}
+</style>
+<!-- OFFLINE_JSZIP -->
+</head>
+<body>
+<a class="skip" href="#app">Skip to converter</a>
+
+<header class="bar">
+  <div class="wrap">
+    <a class="mark" href="#app" aria-label="DNG to XMP Preset Converter">
+      <svg width="30" height="30" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" fill="var(--raised)" stroke="var(--line-strong)"/><path d="M8 24 C 14 24, 15 9, 24 8" stroke="var(--accent)" stroke-width="2.6" fill="none" stroke-linecap="round"/><circle cx="8" cy="24" r="2" fill="var(--ink-2)"/><circle cx="24" cy="8" r="2" fill="var(--ink-2)"/></svg>
+      <span class="mark-name"><b>DNG → XMP</b><span>Preset converter</span></span>
+    </a>
+    <div class="bar-right">
+      <span class="local" title="All processing happens in this browser tab"><i aria-hidden="true"></i><span>Processed on this device</span></span>
+      <button class="btn icon ghost" id="themeBtn" type="button" aria-label="Theme: dark"></button>
+    </div>
+  </div>
+</header>
+
+<section class="intro" aria-labelledby="title">
+  <div class="wrap">
+    <div>
+      <p class="eyebrow">For Lightroom Classic, desktop and mobile</p>
+      <h1 id="title">Turn edited DNGs into Lightroom presets.</h1>
+      <p class="lede">Lightroom stores every slider you moved inside the DNG it exports. Drop the file here and those settings become an importable <strong>.xmp preset</strong>. <strong>Nothing is uploaded</strong>; files are read in this tab.</p>
+      <ul class="facts">
+        <li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Batch and .zip</li>
+        <li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Pick which panels go in</li>
+        <li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Crops and masks stay out</li>
+      </ul>
+    </div>
+    <div class="dev" id="dev" aria-label="Example: Basic panel values read from a DNG and written as preset settings">
+      <div class="dev-head"><b>Basic</b><span class="dev-file">IMG_0042.dng</span></div>
+      <div class="dev-body" id="devBody"></div>
+      <div class="dev-code"><code id="devCode"></code><span>→ .xmp</span></div>
+    </div>
+  </div>
+</section>
+
+<main id="app" tabindex="-1">
+  <div class="wrap grid">
+    <div class="work">
+     <div class="workspace">
+      <div class="drop" id="drop">
+        <div class="drop-icon" aria-hidden="true">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4"/><path d="m7 9 5-5 5 5"/><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>
+        </div>
+        <h2>Drop edited DNGs here</h2>
+        <p>One file or a whole shoot. ZIP archives are unpacked locally.</p>
+        <div class="formats" aria-label="Accepted formats"><span>.dng</span><span>.zip</span></div>
+        <div class="drop-actions">
+          <button class="btn primary" id="pickBtn" type="button">Choose files</button>
+        </div>
+        <input id="fileInput" class="sr-only" type="file" multiple accept=".dng,.DNG,.zip,application/zip,image/x-adobe-dng" tabindex="-1" aria-hidden="true">
+      </div>
+
+      <div class="toolbar">
+        <div class="field">
+          <label for="groupName">Group name</label>
+          <input class="input" id="groupName" type="text" value="My Presets" maxlength="120" autocomplete="off" spellcheck="false" aria-describedby="groupHint">
+          <span class="hint" id="groupHint">The preset folder Lightroom files these under.</span>
+        </div>
+        <div class="tool-actions">
+          <span class="summary" id="summary" aria-live="polite">No files yet</span>
+          <button class="btn ghost" id="clearBtn" type="button" disabled>Clear all</button>
+          <button class="btn primary" id="zipBtn" type="button" disabled>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/></svg>
+            Download all as .zip
+          </button>
+        </div>
+      </div>
+
+      <div class="progress" id="progress" hidden>
+        <div class="progress-text" id="progressText" aria-live="polite"></div>
+        <button class="btn sm" id="cancelBtn" type="button">Cancel</button>
+        <div class="progress-track" role="progressbar" aria-label="Batch progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="progressBar"><div class="progress-fill" id="progressFill"></div></div>
+      </div>
+
+      <ul class="notices" id="notices" aria-live="polite"></ul>
+     </div>
+
+      <div class="cards" id="cards" aria-live="polite">
+        <div class="empty" id="empty">
+          <svg width="40" height="40" viewBox="0 0 40 40" aria-hidden="true"><rect x=".5" y=".5" width="39" height="39" rx="3" fill="var(--sunken)" stroke="var(--line)"/><path d="M6 33 C 15 33, 17 12, 34 7" stroke="var(--accent)" stroke-width="2" fill="none" stroke-linecap="round"/><path d="M6 33 L34 7" stroke="var(--line-strong)" stroke-dasharray="2 3"/></svg>
+          <p>Each file gets a card with its detected profile, the settings found, and a preset you can download. Unchecked groups stay out of the preset.</p>
+        </div>
+      </div>
+    </div>
+
+    <aside class="aside" aria-label="Help">
+      <section class="panel how" aria-labelledby="howTitle">
+        <h2 id="howTitle">How to import</h2>
+        <div class="pbody" style="padding-bottom:4px"><p>Import the .xmp files, or the whole .zip, in any Lightroom app. Menu names can shift between versions.</p></div>
+        <details open>
+          <summary><span class="appmark" aria-hidden="true">LrC</span>Lightroom Classic<svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></summary>
+          <ol>
+            <li>Open the <b>Develop</b> module.</li>
+            <li>In the <b>Presets</b> panel, click <span class="kbd">+</span> and choose <b>Import Presets…</b></li>
+            <li>Select the .xmp files or the .zip. They appear under your group name.</li>
+          </ol>
+        </details>
+        <details>
+          <summary><span class="appmark" aria-hidden="true">Lr</span>Lightroom desktop<svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></summary>
+          <ol>
+            <li>Choose <b>File → Import Profiles &amp; Presets…</b></li>
+            <li>Select the .xmp files or the .zip.</li>
+            <li>Open <b>Edit → Presets</b>; the group sits under <b>Yours</b>.</li>
+          </ol>
+        </details>
+        <details>
+          <summary><span class="appmark" aria-hidden="true">Lr</span>Lightroom mobile<svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></summary>
+          <ol>
+            <li>Save the .xmp or .zip to Files (iOS) or your device storage (Android).</li>
+            <li>Open a photo, tap <b>Presets</b>, then the <span class="kbd">⋯</span> menu and <b>Import Presets</b>.</li>
+            <li>Or import on Lightroom desktop; presets sync to mobile on the same Adobe account.</li>
+          </ol>
+        </details>
+      </section>
+
+      <section class="panel" aria-labelledby="privTitle">
+        <h2 id="privTitle">Privacy and network</h2>
+        <div class="pbody">
+          <p id="privacyText">Images are read and converted in this tab and never uploaded. One network request happens only when you open or create a .zip: the page fetches JSZip 3.10.1 from cdnjs.cloudflare.com, pinned with a Subresource Integrity hash. No file data is sent with it.</p>
+          <p id="offlineText">For a copy with no network use at all, use the offline build, <code>dng2xmp-offline.html</code>, which embeds JSZip.</p>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="limTitle">
+        <h2 id="limTitle">Limits</h2>
+        <div class="pbody">
+          <ul class="limits" id="limits"></ul>
+          <p class="hint">Output is checked for XML structure only. Import results depend on your Lightroom version.</p>
+        </div>
+      </section>
+    </aside>
+  </div>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>DNG → XMP Preset Converter · runs locally in your browser</span>
+    <span>Not affiliated with Adobe. Lightroom is a trademark of Adobe.</span>
+  </div>
+</footer>
+
+<script>
+(() => {
+'use strict';
+
+/* =========================================================================
+   Constants
+   ========================================================================= */
+const NS = {
+  X: 'adobe:ns:meta/',
+  RDF: 'http://www.w3.org/1999/02/22-rdf-syntax-ns#',
+  CRS: 'http://ns.adobe.com/camera-raw-settings/1.0/',
+  XML: 'http://www.w3.org/XML/1998/namespace',
+  XMLNS: 'http://www.w3.org/2000/xmlns/',
+};
+const JSZIP_URL = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+const JSZIP_SRI = 'sha384-+mbV2IY1Zk/X1p/nWllGySJSUN8uMs+gUAN10Or95UBH0fpj6GfKgPmgC5EXieXG';
+const MiB = 1024 * 1024, GiB = 1024 * MiB;
+const LIMITS = {
+  maxPacketBytes: 16 * MiB,     // largest XMP packet we will read
+  scanChunkBytes: 4 * MiB,      // byte-scan fallback chunk size
+  scanOverlap: 256,             // bytes re-read across chunk boundaries
+  maxIfdEntries: 4096,
+  maxIfdChain: 32,
+  zipMaxArchiveBytes: 2 * GiB,  // JSZip reads the archive into memory
+  zipMaxEntries: 1000,          // all entries, including non-DNG
+  zipMaxEntryBytes: 1 * GiB,    // uncompressed size of one entry
+  zipMaxTotalBytes: 8 * GiB,    // declared uncompressed total
+};
+const LIMIT_ROWS = [
+  ['Largest XMP packet', '16 MB'],
+  ['ZIP archive size', '2 GB'],
+  ['ZIP entries', '1,000'],
+  ['ZIP entry, uncompressed', '1 GB'],
+  ['ZIP total, uncompressed', '8 GB'],
+  ['Containers', 'Classic TIFF/DNG (II, MM)'],
+];
+
+const NO_EDITS_MSG = "This DNG has no Lightroom edits. Edit it in Lightroom first, or it's an unedited raw file.";
+
+/* Explicit allowlists. A key belongs to a group only if it matches here. */
+const COLORS = '(Red|Orange|Yellow|Green|Aqua|Blue|Purple|Magenta)';
+function grp(id, label, on, names, patterns = []) {
+  const set = new Set(names);
+  return { id, label, on, test: (k) => set.has(k) || patterns.some((re) => re.test(k)) };
+}
+const GROUPS = [
+  grp('basic', 'Basic tone', true, ['Contrast2012', 'Highlights2012', 'Shadows2012', 'Whites2012', 'Blacks2012', 'Texture', 'Clarity2012', 'Dehaze', 'Vibrance', 'Saturation', 'ConvertToGrayscale']),
+  grp('exposure', 'Exposure', false, ['Exposure2012']),
+  grp('wb', 'White balance', false, ['WhiteBalance', 'Temperature', 'Tint', 'IncrementalTemperature', 'IncrementalTint']),
+  grp('curve', 'Tone curve', true, ['ToneCurveName2012', 'ToneCurvePV2012', 'ToneCurvePV2012Red', 'ToneCurvePV2012Green', 'ToneCurvePV2012Blue'],
+    [/^Parametric(Shadows|Darks|Lights|Highlights|ShadowSplit|MidtoneSplit|HighlightSplit)$/]),
+  grp('hsl', 'HSL / Color mixer', true, [],
+    [new RegExp('^(Hue|Saturation|Luminance)Adjustment' + COLORS + '$'), new RegExp('^GrayMixer' + COLORS + '$')]),
+  grp('grade', 'Color grading', true, ['ColorGradeBlending'],
+    [/^ColorGrade(Shadow|Midtone|Highlight|Global)(Hue|Sat|Lum)$/, /^SplitToning(ShadowHue|ShadowSaturation|HighlightHue|HighlightSaturation|Balance)$/]),
+  grp('point', 'Point color', true, ['PointColors', 'ColorVariance']),
+  grp('calib', 'Calibration', true, ['ShadowTint', 'RedHue', 'RedSaturation', 'GreenHue', 'GreenSaturation', 'BlueHue', 'BlueSaturation']),
+  grp('look', 'Profile / Look', true, ['Look', 'CameraProfile']),
+  grp('effects', 'Effects', true, [],
+    [/^Grain(Amount|Size|Frequency)$/, /^PostCropVignette(Amount|Midpoint|Feather|Roundness|Style|HighlightContrast)$/]),
+  grp('detail', 'Detail', false, ['Sharpness', 'LuminanceSmoothing'],
+    [/^Sharpen(Radius|Detail|EdgeMasking)$/, /^LuminanceNoiseReduction(Detail|Contrast)$/, /^ColorNoiseReduction(Detail|Smoothness)?$/]),
+  grp('lens', 'Lens & geometry', false, ['AutoLateralCA', 'LensManualDistortionAmount', 'VignetteAmount', 'VignetteMidpoint'],
+    [/^LensProfile(Enable|Setup|Name|Filename|DistortionScale|ChromaticAberrationScale|VignettingScale|Digest)$/,
+     /^Defringe(PurpleAmount|PurpleHueLo|PurpleHueHi|GreenAmount|GreenHueLo|GreenHueHi)$/,
+     /^Perspective(Vertical|Horizontal|Rotate|Scale|Aspect|Upright|X|Y)$/]),
+];
+const GROUP_BY_ID = new Map(GROUPS.map((g) => [g.id, g]));
+/* Keys that must be structures (rdf:Seq / nested description) to be exported. */
+const STRUCT_KEYS = new Set(['ToneCurvePV2012', 'ToneCurvePV2012Red', 'ToneCurvePV2012Green', 'ToneCurvePV2012Blue', 'PointColors', 'Look']);
+const ANY_SHAPE_KEYS = new Set(['ColorVariance']);
+const HEADER_KEYS = new Set(['Version', 'ProcessVersion', 'HasSettings']);
+const IMAGE_RULES = [
+  [/^Crop|^HasCrop$/, 'Crop belongs to this image'],
+  [/^AlreadyApplied$/, 'Processing-state flag for this file'],
+  [/^GrainSeed$/, 'Random seed for this image'],
+  [/^CameraProfileDigest$/, 'Fingerprint of this camera’s profile'],
+  [/BasedCorrections$|^MaskGroup|^Masks?$/, 'Mask or local adjustment'],
+  [/^(Retouch|RedEye|SpotRemoval|Healing)/, 'Retouching on this image'],
+  [/^Upright/, 'Upright analysis of this image'],
+  [/^LensBlur/, 'Uses this image’s depth map'],
+  [/^(Enhance|Denoise|RawDetails|SuperResolution)/, 'AI enhance result for this image'],
+  [/^(RawFileName|DocumentID|OriginalDocumentID)$/, 'Reference to this file'],
+];
+
+/* =========================================================================
+   Small helpers (text is always inserted as text nodes, never as HTML)
+   ========================================================================= */
+class UserError extends Error {}
+class CancelError extends Error {}
+
+function h(tag, props, ...kids) {
+  const el = document.createElement(tag);
+  if (props) for (const [k, v] of Object.entries(props)) {
+    if (v == null || v === false) continue;
+    if (k === 'class') el.className = v;
+    else if (k === 'text') el.textContent = v;
+    else if (k.startsWith('on') && typeof v === 'function') el.addEventListener(k.slice(2), v);
+    else if (v === true) el.setAttribute(k, '');
+    else el.setAttribute(k, String(v));
+  }
+  for (const c of kids.flat(Infinity)) {
+    if (c == null || c === false) continue;
+    el.append(c instanceof Node ? c : document.createTextNode(String(c)));
+  }
+  return el;
+}
+const SVGNS = 'http://www.w3.org/2000/svg';
+function svg(tag, attrs, ...kids) {
+  const el = document.createElementNS(SVGNS, tag);
+  for (const [k, v] of Object.entries(attrs || {})) el.setAttribute(k, String(v));
+  for (const c of kids) if (c) el.append(c);
+  return el;
+}
+const ICON_PATHS = {
+  warn: ['M12 3 2 20h20L12 3Z', 'M12 10v4', 'M12 17h.01'],
+  err: ['M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Z', 'M15 9l-6 6', 'M9 9l6 6'],
+  info: ['M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Z', 'M12 11v5', 'M12 8h.01'],
+  check: ['M5 12.5l4.5 4.5L19 7.5'],
+  chev: ['m9 6 6 6-6 6'],
+  x: ['M6 6l12 12', 'M18 6 6 18'],
+  dl: ['M12 4v11', 'm7 10 5 5 5-5', 'M5 20h14'],
+  sun: ['M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z', 'M12 2v2', 'M12 20v2', 'M4.9 4.9l1.4 1.4', 'M17.7 17.7l1.4 1.4', 'M2 12h2', 'M20 12h2', 'M4.9 19.1l1.4-1.4', 'M17.7 6.3l1.4-1.4'],
+  moon: ['M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z'],
+  auto: ['M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Z', 'M12 3v18'],
+};
+function icon(name, size = 16, sw = 2) {
+  return svg('svg', { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': sw, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'aria-hidden': 'true' },
+    ...ICON_PATHS[name].map((d) => svg('path', { d })));
+}
+function chev() { const i = icon('chev', 14); i.setAttribute('class', 'chev'); return i; }
+/* Read-only Lightroom-style slider. value is the source string, kept as is for display. */
+const SLIDERS = [
+  ['Exposure2012', 'Exposure', -5, 5, 'exposure'],
+  ['Contrast2012', 'Contrast', -100, 100, 'basic'],
+  ['Highlights2012', 'Highlights', -100, 100, 'basic'],
+  ['Shadows2012', 'Shadows', -100, 100, 'basic'],
+  ['Whites2012', 'Whites', -100, 100, 'basic'],
+  ['Blacks2012', 'Blacks', -100, 100, 'basic'],
+  ['Texture', 'Texture', -100, 100, 'basic'],
+  ['Clarity2012', 'Clarity', -100, 100, 'basic'],
+  ['Dehaze', 'Dehaze', -100, 100, 'basic'],
+  ['Vibrance', 'Vibrance', -100, 100, 'basic'],
+  ['Saturation', 'Saturation', -100, 100, 'basic'],
+];
+function sliderEl(label, value, min, max) {
+  const n = Number(String(value).replace(/^\+/, ''));
+  const p = Math.min(1, Math.max(0, ((Number.isFinite(n) ? n : 0) - min) / (max - min)));
+  const fill = h('span', { class: 'sl-fill' });
+  const thumb = h('span', { class: 'sl-thumb' });
+  const row = h('div', { class: 'sl' },
+    h('span', { class: 'sl-name' }, label),
+    h('span', { class: 'sl-track', 'aria-hidden': 'true' }, fill, thumb),
+    h('span', { class: 'sl-val' }, value));
+  row.setAttribute('role', 'img');
+  row.setAttribute('aria-label', `${label} ${value}`);
+  row.setPos = (q) => {
+    fill.style.setProperty('--a', (Math.min(q, 0.5) * 100).toFixed(2) + '%');
+    fill.style.setProperty('--w', (Math.abs(q - 0.5) * 100).toFixed(2) + '%');
+    thumb.style.setProperty('--p', (q * 100).toFixed(2) + '%');
+  };
+  row.setPos(p);
+  row.target = p;
+  return row;
+}
+const fmtBytes = (n) => n < 1024 ? `${n} B` : n < MiB ? `${(n / 1024).toFixed(1)} KB` : n < GiB ? `${(n / MiB).toFixed(1)} MB` : `${(n / GiB).toFixed(2)} GB`;
+const fmtInt = (n) => n.toLocaleString('en-US');
+const tick = () => new Promise((r) => setTimeout(r, 0));
+const baseName = (p) => String(p).split(/[\\/]/).pop();
+const stripExt = (n) => n.replace(/\.[^.]+$/, '');
+const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const truncate = (s, n) => (s.length > n ? s.slice(0, n - 1) + '…' : s);
+
+function uuid32() {
+  const b = new Uint8Array(16);
+  crypto.getRandomValues(b);
+  return Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('').toUpperCase();
+}
+
+async function readBytes(blob, start, end) {
+  return new Uint8Array(await blob.slice(start, end).arrayBuffer());
+}
+const u16 = (b, o, le) => le ? (b[o] | (b[o + 1] << 8)) : ((b[o] << 8) | b[o + 1]);
+const u32 = (b, o, le) => (le ? (b[o] | (b[o + 1] << 8) | (b[o + 2] << 16) | (b[o + 3] << 24)) : ((b[o] << 24) | (b[o + 1] << 16) | (b[o + 2] << 8) | b[o + 3])) >>> 0;
+
+function elementChildren(el) {
+  const out = [];
+  for (let n = el.firstChild; n; n = n.nextSibling) if (n.nodeType === 1) out.push(n);
+  return out;
+}
+function firstChildNS(el, ns, local) {
+  if (!el) return null;
+  for (const c of elementChildren(el)) if (c.namespaceURI === ns && c.localName === local) return c;
+  return null;
+}
+
+/* =========================================================================
+   TIFF / DNG: read XMP from tag 700 with bounded, validated reads
+   ========================================================================= */
+async function readTiffXmpLocation(blob) {
+  const size = blob.size;
+  if (size < 8) return { kind: 'not-tiff' };
+  const hd = await readBytes(blob, 0, 8);
+  const order = hd[0] === 0x49 && hd[1] === 0x49 ? 'II' : hd[0] === 0x4d && hd[1] === 0x4d ? 'MM' : null;
+  if (!order) return { kind: 'not-tiff' };
+  const le = order === 'II';
+  const magic = u16(hd, 2, le);
+  if (magic === 43) return { kind: 'unsupported', reason: 'This is a BigTIFF container (64-bit offsets), which the directory reader does not support.' };
+  if (magic !== 42) return { kind: 'unsupported', reason: `This TIFF variant (magic number ${magic}) is not a classic TIFF/DNG directory.` };
+
+  let ifdOff = u32(hd, 4, le);
+  const seen = new Set();
+  for (let idx = 0; ifdOff !== 0; idx++) {
+    if (idx >= LIMITS.maxIfdChain) return { kind: 'damaged', reason: `The TIFF directory chain is longer than ${LIMITS.maxIfdChain} entries.` };
+    if (seen.has(ifdOff)) return { kind: 'damaged', reason: 'The TIFF directory chain loops back on itself.' };
+    seen.add(ifdOff);
+    if (ifdOff < 8 || ifdOff + 2 > size) return { kind: 'damaged', reason: `Directory ${idx} points to byte ${fmtInt(ifdOff)}, outside the ${fmtInt(size)}-byte file.` };
+    const n = u16(await readBytes(blob, ifdOff, ifdOff + 2), 0, le);
+    if (n === 0 || n > LIMITS.maxIfdEntries) return { kind: 'damaged', reason: `Directory ${idx} reports an implausible ${fmtInt(n)} entries.` };
+    const tableEnd = ifdOff + 2 + n * 12 + 4;
+    if (tableEnd > size) return { kind: 'damaged', reason: `Directory ${idx} runs past the end of the file.` };
+    const t = await readBytes(blob, ifdOff + 2, tableEnd);
+    for (let i = 0; i < n; i++) {
+      const e = i * 12;
+      if (u16(t, e, le) !== 700) continue;
+      const type = u16(t, e + 2, le);
+      const count = u32(t, e + 4, le);
+      if (type !== 1 && type !== 2 && type !== 7) return { kind: 'damaged', reason: `The XMP tag (700) has unexpected TIFF type ${type}.` };
+      if (count === 0) return { kind: 'damaged', reason: 'The XMP tag (700) is empty.' };
+      if (count > LIMITS.maxPacketBytes) return { kind: 'damaged', reason: `The XMP tag (700) claims ${fmtBytes(count)}, over the ${fmtBytes(LIMITS.maxPacketBytes)} limit.` };
+      const off = count <= 4 ? ifdOff + 2 + e + 8 : u32(t, e + 8, le);
+      if (off + count > size) return { kind: 'damaged', reason: `The XMP tag (700) points to bytes ${fmtInt(off)}–${fmtInt(off + count)}, past the end of the ${fmtInt(size)}-byte file.` };
+      return { kind: 'found', offset: off, length: count, ifd: idx, order };
+    }
+    ifdOff = u32(t, n * 12, le);
+  }
+  return { kind: 'no-tag', order };
+}
+
+/* Locate the outermost xmpmeta (or bare rdf:RDF) element in a packet.
+   Works on a latin-1 view so character offsets equal byte offsets. Prefixes are not hardcoded. */
+function locateXmpElement(latin) {
+  const open = /<([A-Za-z_][\w.\-]*:)?xmpmeta(?=[\s>\/])/.exec(latin);
+  const tryClose = (m, local) => {
+    const re = new RegExp('</' + escapeRe(m[1] || '') + local + '\\s*>', 'g');
+    re.lastIndex = m.index;
+    const c = re.exec(latin);
+    return c ? { start: m.index, end: c.index + c[0].length } : { start: m.index, end: -1 };
+  };
+  if (open) return tryClose(open, 'xmpmeta');
+  const rdf = /<([A-Za-z_][\w.\-]*:)?RDF(?=[\s>\/])/.exec(latin);
+  if (rdf) return tryClose(rdf, 'RDF');
+  return null;
+}
+const latin1 = new TextDecoder('latin1');
+function decodePacket(bytes) {
+  const loc = locateXmpElement(latin1.decode(bytes));
+  if (!loc) throw new UserError('An XMP packet was found, but it contains no xmpmeta element. The metadata is damaged.');
+  if (loc.end < 0) throw new UserError('The XMP metadata is truncated: its closing xmpmeta tag is missing. The file was not repaired.');
+  const slice = bytes.subarray(loc.start, loc.end);
+  let text;
+  try { text = new TextDecoder('utf-8', { fatal: true }).decode(slice); }
+  catch { throw new UserError('The XMP metadata is damaged: it is not valid UTF-8 text. The file was not repaired.'); }
+  if (text.includes('\u0000')) throw new UserError('The XMP metadata is damaged: it contains NUL bytes inside the XML. The file was not repaired.');
+  return text;
+}
+
+/* Chunked byte scan fallback. Handles markers that straddle chunk boundaries via overlap + dedupe. */
+async function scanForPackets(blob, ctx, onProgress) {
+  const size = blob.size;
+  const opens = new Map(); // absOffset -> prefix
+  const closes = new Map(); // absOffset -> { prefix, end }
+  const openRe = /<([A-Za-z_][\w.\-]*:)?xmpmeta(?=[\s>\/])/g;
+  const closeRe = /<\/([A-Za-z_][\w.\-]*:)?xmpmeta\s*>/g;
+  for (let pos = 0; pos < size; pos += LIMITS.scanChunkBytes) {
+    ctx.check();
+    const start = Math.max(0, pos - LIMITS.scanOverlap);
+    const end = Math.min(size, pos + LIMITS.scanChunkBytes);
+    const s = latin1.decode(await readBytes(blob, start, end));
+    let m;
+    openRe.lastIndex = 0;
+    while ((m = openRe.exec(s))) opens.set(start + m.index, m[1] || '');
+    closeRe.lastIndex = 0;
+    while ((m = closeRe.exec(s))) closes.set(start + m.index, { prefix: m[1] || '', end: start + m.index + m[0].length });
+    onProgress(end / size);
+    await tick();
+  }
+  // Pair each close with the nearest preceding unpaired open of the same prefix.
+  const events = [...[...opens].map(([o, p]) => ({ o, t: 'o', p })), ...[...closes].map(([o, c]) => ({ o, t: 'c', p: c.prefix, end: c.end }))].sort((a, b) => a.o - b.o);
+  const stack = [];
+  const pairs = [];
+  for (const ev of events) {
+    if (ev.t === 'o') stack.push(ev);
+    else {
+      for (let i = stack.length - 1; i >= 0; i--) {
+        if (stack[i].p === ev.p) { pairs.push({ start: stack[i].o, end: ev.end }); stack.splice(i, 1); break; }
+      }
+    }
+  }
+  const unclosed = stack.length;
+  pairs.sort((a, b) => a.start - b.start);
+  return { pairs, unclosed };
+}
+
+/* =========================================================================
+   XMP analysis: direct crs: properties of top-level rdf:Description only
+   ========================================================================= */
+function parseXml(text) {
+  const doc = new DOMParser().parseFromString(text, 'application/xml');
+  const err = doc.getElementsByTagName('parsererror')[0];
+  if (err) {
+    const msg = truncate((err.textContent || '').replace(/\s+/g, ' ').trim(), 160);
+    throw new UserError(`The XMP metadata is damaged: the XML does not parse${msg ? ' (' + msg + ')' : ''}. The file was not repaired.`);
+  }
+  return doc;
+}
+
+function classify(local, kind, value) {
+  if (HEADER_KEYS.has(local)) return { group: 'header' };
+  for (const [re, why] of IMAGE_RULES) if (re.test(local)) return { group: 'image', reason: why };
+  if (local === 'CameraProfile' && value === 'Embedded') return { group: 'image', reason: 'Profile embedded in this DNG; it cannot travel in a preset' };
+  for (const g of GROUPS) {
+    if (!g.test(local)) continue;
+    if (!ANY_SHAPE_KEYS.has(local)) {
+      const wantStruct = STRUCT_KEYS.has(local);
+      if (wantStruct !== (kind === 'struct')) return { group: 'unsupported', reason: wantStruct ? 'Expected a structure, found a plain value' : 'Expected a plain value, found a structure' };
+    }
+    return { group: g.id };
+  }
+  return { group: 'unsupported', reason: 'Not on the supported list' };
+}
+
+function readText(el) {
+  // Simple value, or first rdf:li of an rdf:Alt/Seq/Bag
+  if (!el) return null;
+  const li = el.getElementsByTagNameNS(NS.RDF, 'li')[0];
+  return (li || el).textContent.trim();
+}
+function lookInfo(node) {
+  let d = firstChildNS(node, NS.RDF, 'Description');
+  if (!d && node.getAttributeNS(NS.RDF, 'parseType') === 'Resource') d = node;
+  const get = (k) => {
+    if (!d) return null;
+    if (d.hasAttributeNS(NS.CRS, k)) return d.getAttributeNS(NS.CRS, k);
+    const c = firstChildNS(d, NS.CRS, k);
+    return c ? readText(c) : null;
+  };
+  const name = get('Name');
+  const amountRaw = get('Amount');
+  const amount = amountRaw != null && amountRaw !== '' && isFinite(Number(amountRaw)) ? Number(amountRaw) : null;
+  // RGB/look table dependencies anywhere inside the Look structure
+  const refs = new Set(), data = new Set(), lookTables = new Set();
+  const walk = (el) => {
+    for (const a of el.attributes) {
+      if (a.namespaceURI !== NS.CRS) continue;
+      if (a.localName === 'RGBTable') refs.add(a.value);
+      else if (a.localName === 'LookTable') lookTables.add(a.value);
+      else if (a.localName.startsWith('Table_')) data.add(a.localName.slice(6));
+    }
+    for (const c of elementChildren(el)) {
+      if (c.namespaceURI === NS.CRS) {
+        if (c.localName === 'RGBTable' && !elementChildren(c).length) refs.add(c.textContent.trim());
+        if (c.localName === 'RGBTables') for (const li of c.getElementsByTagNameNS(NS.RDF, 'li')) refs.add(li.textContent.trim());
+        if (c.localName === 'LookTable' && !elementChildren(c).length) lookTables.add(c.textContent.trim());
+        if (c.localName.startsWith('Table_')) data.add(c.localName.slice(6));
+      }
+      walk(c);
+    }
+  };
+  walk(node);
+  const missing = [...refs].filter((r) => r && !data.has(r));
+  return { name, amount, uuid: get('UUID'), refs: [...refs], tableData: [...data], missing, lookTables: [...lookTables], hasDescription: !!d };
+}
+
+function analyzeXml(text) {
+  const doc = parseXml(text);
+  const rdf = doc.getElementsByTagNameNS(NS.RDF, 'RDF')[0];
+  const result = { props: [], duplicates: [], version: null, processVersion: null, look: null, cameraProfile: null };
+  if (!rdf) return result;
+  const seen = new Set();
+  const add = (p) => {
+    if (seen.has(p.local)) { result.duplicates.push(p.local); return; }
+    seen.add(p.local);
+    Object.assign(p, classify(p.local, p.kind, p.value));
+    result.props.push(p);
+  };
+  for (const d of elementChildren(rdf)) {
+    if (d.namespaceURI !== NS.RDF || d.localName !== 'Description') continue;
+    for (const a of d.attributes) {
+      if (a.namespaceURI === NS.CRS) add({ local: a.localName, kind: 'attr', value: a.value });
+    }
+    for (const c of elementChildren(d)) {
+      if (c.namespaceURI !== NS.CRS) continue;
+      const simple = !elementChildren(c).length && c.attributes.length === 0;
+      if (simple) add({ local: c.localName, kind: 'attr', value: c.textContent, fromElement: true });
+      else add({ local: c.localName, kind: 'struct', node: c });
+    }
+  }
+  for (const p of result.props) {
+    if (p.local === 'Version' && p.kind === 'attr') result.version = p.value;
+    if (p.local === 'ProcessVersion' && p.kind === 'attr') result.processVersion = p.value;
+    if (p.local === 'CameraProfile' && p.kind === 'attr') result.cameraProfile = p.value;
+    if (p.local === 'Look' && p.kind === 'struct') result.look = lookInfo(p.node);
+  }
+  result.hasDevelop = result.props.some((p) => p.group !== 'header' && p.group !== 'image');
+  result.supportedCount = result.props.filter((p) => GROUP_BY_ID.has(p.group)).length;
+  result.localAdjustments = result.props.some((p) => p.group === 'image' && /BasedCorrections$|^MaskGroup|^Masks?$/.test(p.local));
+  return result;
+}
+
+/* =========================================================================
+   Extraction pipeline for one DNG blob
+   ========================================================================= */
+async function extractFromDng(blob, ctx, onProgress, notes = []) {
+  const loc = await readTiffXmpLocation(blob);
+  ctx.check();
+  if (loc.kind === 'not-tiff') {
+    throw new UserError('Not a DNG: the file does not start with a TIFF header. It may be another format, renamed, or corrupt.');
+  }
+  if (loc.kind === 'found') {
+    onProgress(0.5);
+    const bytes = await readBytes(blob, loc.offset, loc.offset + loc.length);
+    const text = decodePacket(bytes);
+    const analysis = analyzeXml(text);
+    onProgress(1);
+    if (!analysis.hasDevelop) throw new UserError(NO_EDITS_MSG);
+    return { method: 'tag', where: `TIFF tag 700 (${loc.order}, IFD${loc.ifd})`, candidates: [{ offset: loc.offset, length: loc.length, analysis }], notes };
+  }
+  notes.push({ level: 'info', text: (loc.kind === 'no-tag'
+    ? 'No XMP tag (700) in the TIFF directory.'
+    : loc.reason) + ' The file bytes were searched for an XMP packet instead.' });
+
+  const { pairs, unclosed } = await scanForPackets(blob, ctx, onProgress);
+  if (!pairs.length) {
+    if (unclosed) throw new UserError('An XMP packet start was found, but it never closes. The metadata is truncated or damaged.');
+    throw new UserError('No XMP metadata found in this file. ' + NO_EDITS_MSG);
+  }
+  const candidates = [], damaged = [], texts = new Set();
+  let plain = 0;
+  for (const p of pairs) {
+    ctx.check();
+    if (p.end - p.start > LIMITS.maxPacketBytes) { damaged.push(`Packet at byte ${fmtInt(p.start)} is larger than ${fmtBytes(LIMITS.maxPacketBytes)}.`); continue; }
+    try {
+      const text = decodePacket(await readBytes(blob, p.start, p.end));
+      const analysis = analyzeXml(text);
+      if (!analysis.hasDevelop) { plain++; continue; }
+      if (texts.has(text)) continue; // identical copy, not ambiguous
+      texts.add(text);
+      candidates.push({ offset: p.start, length: p.end - p.start, analysis });
+    } catch (e) {
+      if (e instanceof UserError) damaged.push(`Packet at byte ${fmtInt(p.start)}: ${e.message}`);
+      else throw e;
+    }
+  }
+  for (const d of damaged) notes.push({ level: 'warn', text: d });
+  if (!candidates.length) {
+    if (damaged.length) throw new UserError(damaged.length === 1 ? damaged[0] : `${damaged.length} XMP packets were found, all damaged. ${damaged[0]}`);
+    throw new UserError(NO_EDITS_MSG);
+  }
+  if (plain) notes.push({ level: 'info', text: `${plain} other XMP packet${plain > 1 ? 's' : ''} without develop settings ignored (for example a preview’s metadata).` });
+  return { method: 'scan', where: 'byte scan', candidates, notes };
+}
+
+/* =========================================================================
+   ZIP: bounded central-directory check before JSZip, streamed size checks
+   ========================================================================= */
+let jszipPromise = null;
+function loadJSZip() {
+  if (window.JSZip) return Promise.resolve(window.JSZip);
+  if (jszipPromise) return jszipPromise;
+  jszipPromise = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = JSZIP_URL;
+    s.integrity = JSZIP_SRI;
+    s.crossOrigin = 'anonymous';
+    s.referrerPolicy = 'no-referrer';
+    s.onload = () => window.JSZip ? resolve(window.JSZip) : reject(new UserError('JSZip loaded but did not initialise.'));
+    s.onerror = () => { jszipPromise = null; s.remove(); reject(new UserError('Could not load JSZip from cdnjs (offline, blocked, or the integrity check failed). ZIP import and export need it; single .dng files still work. The offline build avoids this.')); };
+    document.head.append(s);
+  });
+  return jszipPromise;
+}
+
+async function readZipDirectory(blob) {
+  const size = blob.size;
+  if (size < 22) throw new UserError('This ZIP is empty or too small to be valid.');
+  if (size > LIMITS.zipMaxArchiveBytes) throw new UserError(`This ZIP is ${fmtBytes(size)}; the limit is ${fmtBytes(LIMITS.zipMaxArchiveBytes)}. Drop the DNGs directly instead.`);
+  const tailLen = Math.min(size, 22 + 65535);
+  const tail = await readBytes(blob, size - tailLen, size);
+  let e = -1;
+  for (let i = tail.length - 22; i >= 0; i--) {
+    if (tail[i] === 0x50 && tail[i + 1] === 0x4b && tail[i + 2] === 5 && tail[i + 3] === 6) { e = i; break; }
+  }
+  if (e < 0) throw new UserError('Not a valid ZIP: the end-of-archive record is missing. The file may be corrupt or not a ZIP.');
+  const disk = u16(tail, e + 4, true), cdDisk = u16(tail, e + 6, true);
+  const nHere = u16(tail, e + 8, true), n = u16(tail, e + 10, true);
+  const cdSize = u32(tail, e + 12, true), cdOff = u32(tail, e + 16, true);
+  if (n === 0xffff || cdSize === 0xffffffff || cdOff === 0xffffffff) throw new UserError('ZIP64 archives are not supported. Re-zip with a standard ZIP tool or drop the DNGs directly.');
+  if (disk !== 0 || cdDisk !== 0 || nHere !== n) throw new UserError('Split (multi-part) ZIP archives are not supported.');
+  if (n > LIMITS.zipMaxEntries) throw new UserError(`This ZIP has ${fmtInt(n)} entries; the limit is ${fmtInt(LIMITS.zipMaxEntries)}.`);
+  if (cdOff + cdSize > size) throw new UserError('The ZIP directory points past the end of the file. The archive is corrupt or truncated.');
+  const cd = await readBytes(blob, cdOff, cdOff + cdSize);
+  const utf8 = new TextDecoder('utf-8');
+  const entries = [];
+  let p = 0, total = 0;
+  for (let i = 0; i < n; i++) {
+    if (p + 46 > cd.length || u32(cd, p, true) !== 0x02014b50) throw new UserError('The ZIP directory is corrupt.');
+    const flags = u16(cd, p + 8, true), method = u16(cd, p + 10, true);
+    const csize = u32(cd, p + 20, true), usize = u32(cd, p + 24, true);
+    const nl = u16(cd, p + 28, true), xl = u16(cd, p + 30, true), cl = u16(cd, p + 32, true);
+    if (p + 46 + nl > cd.length) throw new UserError('The ZIP directory is corrupt.');
+    if (csize === 0xffffffff || usize === 0xffffffff) throw new UserError('ZIP64 archives are not supported. Re-zip with a standard ZIP tool or drop the DNGs directly.');
+    const name = utf8.decode(cd.subarray(p + 46, p + 46 + nl));
+    entries.push({ name, usize, csize, method, encrypted: !!(flags & 1), dir: name.endsWith('/') });
+    total += usize;
+    p += 46 + nl + xl + cl;
+  }
+  if (total > LIMITS.zipMaxTotalBytes) throw new UserError(`This ZIP would expand to ${fmtBytes(total)}; the limit is ${fmtBytes(LIMITS.zipMaxTotalBytes)}.`);
+  return entries;
+}
+
+function extractZipEntry(zipFile, limit, ctx) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    let total = 0, done = false;
+    const stream = zipFile.internalStream('uint8array');
+    const fail = (err) => { if (done) return; done = true; try { stream.pause(); } catch {} reject(err); };
+    stream.on('data', (chunk) => {
+      if (done) return;
+      if (ctx.cancelled()) return fail(new CancelError());
+      total += chunk.length;
+      if (total > limit) return fail(new UserError('This ZIP entry expands past its declared size. The archive is corrupt or unsafe, so it was not read.'));
+      chunks.push(chunk);
+    }).on('error', (e) => fail(new UserError('This ZIP entry could not be decompressed: ' + (e && e.message ? e.message : 'unknown error') + '.')))
+      .on('end', () => { if (!done) { done = true; resolve(new Blob(chunks)); } })
+      .resume();
+  });
+}
+
+/* =========================================================================
+   Preset construction (DOM, createElementNS / setAttributeNS, XMLSerializer)
+   ========================================================================= */
+const RESERVED_PREFIX = { [NS.CRS]: 'crs', [NS.RDF]: 'rdf', [NS.XML]: 'xml', [NS.X]: 'x' };
+function copyInto(doc, src, prefixes) {
+  if (src.nodeType === 3 || src.nodeType === 4) return doc.createTextNode(src.nodeValue);
+  if (src.nodeType !== 1) return null; // comments / PIs are dropped
+  const pfx = (uri, p) => {
+    if (!uri) return null;
+    if (RESERVED_PREFIX[uri]) return RESERVED_PREFIX[uri];
+    if (prefixes.has(uri)) return prefixes.get(uri);
+    let cand = p && !Object.values(RESERVED_PREFIX).includes(p) && ![...prefixes.values()].includes(p) ? p : null;
+    for (let i = 1; !cand; i++) if (![...prefixes.values()].includes('ns' + i)) cand = 'ns' + i;
+    prefixes.set(uri, cand);
+    return cand;
+  };
+  const ep = pfx(src.namespaceURI, src.prefix);
+  const el = src.namespaceURI ? doc.createElementNS(src.namespaceURI, ep + ':' + src.localName) : doc.createElementNS(null, src.localName);
+  for (const a of src.attributes) {
+    if (a.namespaceURI === NS.XMLNS) continue; // serializer emits declarations
+    if (a.namespaceURI) el.setAttributeNS(a.namespaceURI, pfx(a.namespaceURI, a.prefix) + ':' + a.localName, a.value);
+    else el.setAttributeNS(null, a.localName, a.value);
+  }
+  for (let c = src.firstChild; c; c = c.nextSibling) {
+    const k = copyInto(doc, c, prefixes);
+    if (k) el.append(k);
+  }
+  return el;
+}
+function indentTree(doc, el, depth) {
+  const kids = [...el.childNodes];
+  const els = kids.filter((n) => n.nodeType === 1);
+  if (!els.length || kids.some((n) => (n.nodeType === 3 || n.nodeType === 4) && n.nodeValue.trim())) return;
+  for (const n of kids) if (n.nodeType === 3) n.remove();
+  for (const c of els) { el.insertBefore(doc.createTextNode('\n' + ' '.repeat(depth + 1)), c); indentTree(doc, c, depth + 1); }
+  el.append(doc.createTextNode('\n' + ' '.repeat(depth)));
+}
+function altProp(doc, local, text) {
+  const el = doc.createElementNS(NS.CRS, 'crs:' + local);
+  const alt = doc.createElementNS(NS.RDF, 'rdf:Alt');
+  const li = doc.createElementNS(NS.RDF, 'rdf:li');
+  li.setAttributeNS(NS.XML, 'xml:lang', 'x-default');
+  li.textContent = text; // serializer escapes &, <, >
+  alt.append(li); el.append(alt);
+  return el;
+}
+
+function selectedProps(item) {
+  return item.analysis.props.filter((p) => GROUP_BY_ID.has(p.group) && item.on.has(p.group));
+}
+function dependencies(item, selected) {
+  const out = { requiresRGBTables: false, messages: [] };
+  const a = item.analysis;
+  const lookSel = selected.some((p) => p.local === 'Look');
+  if (lookSel && a.look) {
+    if (a.look.tableData.length) out.requiresRGBTables = true;
+    for (const m of a.look.missing) out.messages.push({ level: 'warn', text: `The look references RGB table ${truncate(m, 40)}, but its data is not in this file. The preset keeps the reference; Lightroom may show different colors without it.` });
+    if (a.look.tableData.length) out.messages.push({ level: 'info', text: `The look carries ${a.look.tableData.length} embedded RGB table${a.look.tableData.length > 1 ? 's' : ''}; they are copied into the preset and RequiresRGBTables is set to True.` });
+    if (!a.look.hasDescription) out.messages.push({ level: 'warn', text: 'The Look structure has no description block. It is copied as found, but Lightroom may ignore it.' });
+  }
+  return out;
+}
+
+function buildPreset(item, groupName) {
+  const a = item.analysis;
+  const doc = document.implementation.createDocument(NS.X, 'x:xmpmeta', null);
+  const root = doc.documentElement;
+  root.setAttributeNS(NS.X, 'x:xmptk', 'Adobe XMP Core 7.0-c000');
+  const rdf = doc.createElementNS(NS.RDF, 'rdf:RDF');
+  rdf.setAttributeNS(NS.XMLNS, 'xmlns:rdf', NS.RDF);
+  root.append(rdf);
+  const d = doc.createElementNS(NS.RDF, 'rdf:Description');
+  rdf.append(d);
+  d.setAttributeNS(NS.RDF, 'rdf:about', '');
+  d.setAttributeNS(NS.XMLNS, 'xmlns:crs', NS.CRS);
+
+  const selected = selectedProps(item);
+  const deps = dependencies(item, selected);
+  const head = [
+    ['PresetType', 'Normal'], ['Cluster', ''], ['UUID', item.uuid],
+    ['SupportsAmount', 'True'], ['SupportsColor', 'True'], ['SupportsMonochrome', 'False'],
+    ['SupportsHighDynamicRange', 'True'], ['SupportsNormalDynamicRange', 'True'],
+    ['SupportsSceneReferred', 'True'], ['SupportsOutputReferred', 'True'],
+    ['RequiresRGBTables', deps.requiresRGBTables ? 'True' : 'False'],
+    ['CameraModelRestriction', ''], ['Copyright', ''], ['ContactInfo', ''],
+  ];
+  if (a.version != null) head.push(['Version', a.version]);
+  if (a.processVersion != null) head.push(['ProcessVersion', a.processVersion]);
+  head.push(['HasSettings', 'True']);
+  for (const [k, v] of head) d.setAttributeNS(NS.CRS, 'crs:' + k, v);
+  let attrCount = head.length;
+  for (const p of selected) if (p.kind === 'attr') { d.setAttributeNS(NS.CRS, 'crs:' + p.local, p.value); attrCount++; }
+
+  d.append(altProp(doc, 'Name', item.presetName.trim()), altProp(doc, 'Group', groupName.trim()));
+  const prefixes = new Map();
+  let structCount = 0;
+  for (const p of selected) if (p.kind === 'struct') { d.append(copyInto(doc, p.node, prefixes)); structCount++; }
+  indentTree(doc, root, 0);
+  const xml = new XMLSerializer().serializeToString(doc) + '\n';
+  return { xml, expect: { attrCount, structCount, name: item.presetName.trim(), group: groupName.trim(), uuid: item.uuid }, deps };
+}
+
+function validatePreset(xml, expect) {
+  let doc;
+  try { doc = parseXml(xml); } catch (e) { return { ok: false, msg: 'Output XML did not parse.' }; }
+  const r = doc.documentElement;
+  if (r.namespaceURI !== NS.X || r.localName !== 'xmpmeta') return { ok: false, msg: 'Root element is not x:xmpmeta.' };
+  const rdf = firstChildNS(r, NS.RDF, 'RDF');
+  const d = firstChildNS(rdf, NS.RDF, 'Description');
+  if (!d) return { ok: false, msg: 'Missing rdf:Description.' };
+  if (d.getAttributeNS(NS.CRS, 'HasSettings') !== 'True') return { ok: false, msg: 'HasSettings is missing.' };
+  if (!/^[0-9A-F]{32}$/.test(d.getAttributeNS(NS.CRS, 'UUID') || '')) return { ok: false, msg: 'UUID is not 32 uppercase hex characters.' };
+  const crsAttrs = [...d.attributes].filter((x) => x.namespaceURI === NS.CRS).length;
+  if (crsAttrs !== expect.attrCount) return { ok: false, msg: `Expected ${expect.attrCount} settings attributes, found ${crsAttrs}.` };
+  const structs = elementChildren(d).filter((c) => c.namespaceURI === NS.CRS && c.localName !== 'Name' && c.localName !== 'Group').length;
+  if (structs !== expect.structCount) return { ok: false, msg: 'Nested structures did not survive serialisation.' };
+  if (readText(firstChildNS(d, NS.CRS, 'Name')) !== expect.name) return { ok: false, msg: 'Preset name did not round-trip.' };
+  if (readText(firstChildNS(d, NS.CRS, 'Group')) !== expect.group) return { ok: false, msg: 'Group name did not round-trip.' };
+  return { ok: true };
+}
+
+/* =========================================================================
+   Filenames
+   ========================================================================= */
+function sanitizeFilename(name) {
+  let s = String(name).normalize('NFC').replace(/[\u0000-\u001f\u007f<>:"/\\|?*]/g, '_').replace(/\s+/g, ' ').trim().replace(/^[.\s]+|[.\s]+$/g, '');
+  if (!s) s = 'preset';
+  if (/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i.test(s)) s = '_' + s;
+  const chars = Array.from(s);
+  if (chars.length > 120) s = chars.slice(0, 120).join('').trim();
+  return s;
+}
+/* Deterministic: items in list order; later duplicates get " (2)", " (3)", … */
+function assignFilenames() {
+  const used = new Set();
+  const map = new Map();
+  for (const it of state.items) {
+    if (it.status !== 'ready') continue;
+    const base = sanitizeFilename(it.presetName.trim() || it.defaultName);
+    let name = base, i = 2;
+    while (used.has(name.toLowerCase() + '.xmp')) name = `${base} (${i++})`;
+    used.add(name.toLowerCase() + '.xmp');
+    map.set(it.id, name + '.xmp');
+  }
+  return map;
+}
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = h('a', { href: url, download: filename, style: 'display:none' });
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+
+/* =========================================================================
+   State and queue
+   ========================================================================= */
+const state = { items: [], queue: [], running: false, cancel: false, batch: { total: 0, done: 0 }, current: null, nextId: 1 };
+const $ = (id) => document.getElementById(id);
+const els = {
+  drop: $('drop'), input: $('fileInput'), pick: $('pickBtn'), cards: $('cards'), empty: $('empty'),
+  group: $('groupName'), groupHint: $('groupHint'), zip: $('zipBtn'), clear: $('clearBtn'), summary: $('summary'),
+  progress: $('progress'), progressText: $('progressText'), progressFill: $('progressFill'), progressBar: $('progressBar'), cancel: $('cancelBtn'),
+  notices: $('notices'), theme: $('themeBtn'), limits: $('limits'),
+};
+
+function newItem(name, origin, size) {
+  const it = {
+    id: state.nextId++, name, origin, size, status: 'queued', progress: 0, error: null,
+    notes: [], extraction: null, analysis: null, chosen: null,
+    on: new Set(GROUPS.filter((g) => g.on).map((g) => g.id)),
+    defaultName: stripExt(baseName(name)), presetName: stripExt(baseName(name)), uuid: uuid32(), ui: null,
+  };
+  state.items.push(it);
+  renderCard(it);
+  return it;
+}
+
+function enqueue(task) {
+  state.queue.push(task);
+  state.batch.total++;
+  run();
+}
+function makeCtx() {
+  return { check() { if (state.cancel) throw new CancelError(); }, cancelled: () => state.cancel };
+}
+async function run() {
+  if (state.running) return;
+  state.running = true;
+  state.cancel = false;
+  refreshChrome();
+  try {
+    while (state.queue.length) {
+      if (state.cancel) {
+        for (const t of state.queue.splice(0)) { if (t.item) setCancelled(t.item); state.batch.done++; }
+        break;
+      }
+      const t = state.queue.shift();
+      state.current = t;
+      refreshProgress();
+      try { await processTask(t); }
+      catch (e) {
+        if (e instanceof CancelError) { if (t.item) setCancelled(t.item); }
+        else if (t.item) setError(t.item, e);
+        else setError(newItem(t.name, null, t.blob ? t.blob.size : null), e);
+        if (!(e instanceof UserError) && !(e instanceof CancelError)) console.error(e);
+      }
+      state.batch.done++;
+      state.current = null;
+      refreshProgress();
+      await tick();
+    }
+  } finally {
+    state.running = false;
+    state.cancel = false;
+    state.current = null;
+    state.batch = { total: 0, done: 0 };
+    refreshChrome();
+  }
+}
+
+async function processTask(t) {
+  const ctx = makeCtx();
+  if (t.type === 'dng') {
+    const it = t.item;
+    it.status = 'reading'; updateCard(it);
+    await processDng(it, t.blob, ctx);
+  } else if (t.type === 'zip') {
+    await processZip(t, ctx);
+  } else if (t.type === 'zipentry') {
+    const it = t.item;
+    it.status = 'reading'; updateCard(it);
+    const blob = await extractZipEntry(t.zipFile, t.limit, ctx);
+    ctx.check();
+    await processDng(it, blob, ctx);
+  }
+}
+
+async function processDng(it, blob, ctx) {
+  it.notes = []; // filled as extraction goes, so error cards keep the context
+  const ex = await extractFromDng(blob, ctx, (p) => { it.progress = p; refreshProgress(); updateCard(it); }, it.notes);
+  it.extraction = ex;
+  if (ex.candidates.length === 1) chooseCandidate(it, 0);
+  else { it.status = 'choose'; updateCard(it, true); }
+}
+function chooseCandidate(it, idx) {
+  it.chosen = idx;
+  it.analysis = it.extraction.candidates[idx].analysis;
+  it.status = 'ready';
+  updateCard(it, true);
+  refreshChrome();
+}
+function setError(it, e) {
+  it.status = 'error';
+  it.error = e instanceof UserError ? e.message : 'Unexpected error while reading this file' + (e && e.message ? `: ${e.message}` : '.');
+  updateCard(it, true);
+  refreshChrome();
+}
+function setCancelled(it) {
+  if (it.status === 'ready' || it.status === 'error' || it.status === 'choose') return;
+  it.status = 'cancelled';
+  updateCard(it, true);
+}
+
+async function processZip(t, ctx) {
+  const entries = await readZipDirectory(t.blob);
+  ctx.check();
+  const usable = [], skipped = [];
+  for (const e of entries) {
+    if (e.dir) continue;
+    const bn = baseName(e.name);
+    if (e.name.startsWith('__MACOSX/') || bn.startsWith('._')) continue;
+    if (/\.dng$/i.test(bn)) usable.push(e); else skipped.push(e);
+  }
+  if (!usable.length) throw new UserError(`No .dng files inside ${t.name}.`);
+  const JSZip = await loadJSZip();
+  ctx.check();
+  let zip;
+  try { zip = await JSZip.loadAsync(t.blob); }
+  catch (e) { throw new UserError(`${t.name} could not be opened as a ZIP: ${e && e.message ? e.message : 'corrupt archive'}.`); }
+  ctx.check();
+  const tasks = [];
+  for (const e of usable) {
+    const it = newItem(e.name, t.name, e.usize);
+    const f = zip.file(e.name);
+    if (e.encrypted) { setError(it, new UserError('This ZIP entry is encrypted; encrypted archives are not supported.')); continue; }
+    if (e.method !== 0 && e.method !== 8) { setError(it, new UserError(`This ZIP entry uses compression method ${e.method}; only stored and deflate are supported.`)); continue; }
+    if (e.usize > LIMITS.zipMaxEntryBytes) { setError(it, new UserError(`This ZIP entry is ${fmtBytes(e.usize)} uncompressed; the per-entry limit is ${fmtBytes(LIMITS.zipMaxEntryBytes)}.`)); continue; }
+    if (!f) { setError(it, new UserError('This entry is listed in the ZIP directory but could not be found by the ZIP reader.')); continue; }
+    tasks.push({ type: 'zipentry', item: it, zipFile: f, limit: e.usize, name: e.name });
+  }
+  state.queue.unshift(...tasks);
+  state.batch.total += tasks.length;
+  addNotice(`${t.name}: ${usable.length} DNG${usable.length === 1 ? '' : 's'} found${skipped.length ? `, ${skipped.length} other file${skipped.length === 1 ? '' : 's'} skipped` : ''}.`);
+}
+
+function addFiles(fileList) {
+  for (const f of fileList) {
+    const n = f.name || 'unnamed';
+    if (/\.zip$/i.test(n) || f.type === 'application/zip' || f.type === 'application/x-zip-compressed') {
+      enqueue({ type: 'zip', blob: f, name: n });
+    } else if (/\.dng$/i.test(n)) {
+      const it = newItem(n, null, f.size);
+      enqueue({ type: 'dng', item: it, blob: f, name: n });
+    } else {
+      const it = newItem(n, null, f.size);
+      setError(it, new UserError('Unsupported file type. Drop .dng files, or .zip archives that contain them.'));
+    }
+  }
+  refreshChrome();
+}
+
+function addNotice(text) {
+  els.notices.append(h('li', null, text));
+}
+
+/* =========================================================================
+   Rendering
+   ========================================================================= */
+function curvePoints(node) {
+  if (!node) return null;
+  const pts = [];
+  for (const li of node.getElementsByTagNameNS(NS.RDF, 'li')) {
+    const m = /^\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*$/.exec(li.textContent);
+    if (m) pts.push([Number(m[1]), Number(m[2])]);
+  }
+  return pts.length >= 2 ? pts : null;
+}
+function thumbFor(it) {
+  const box = h('div', { class: 'thumb', 'aria-hidden': 'true' });
+  const a = it.analysis;
+  if (!a) { box.append(h('span', { class: 'tag' }, it.status === 'error' ? '!' : 'DNG')); return box; }
+  const curves = [['ToneCurvePV2012', 'var(--ink)'], ['ToneCurvePV2012Red', '#E5484D'], ['ToneCurvePV2012Green', '#30A46C'], ['ToneCurvePV2012Blue', '#3E8EF7']];
+  const s = svg('svg', { viewBox: '0 0 100 100', preserveAspectRatio: 'none' });
+  s.append(svg('path', { d: 'M25 0V100M50 0V100M75 0V100M0 25H100M0 50H100M0 75H100', stroke: 'var(--line)', 'stroke-width': '1', fill: 'none', 'vector-effect': 'non-scaling-stroke' }));
+  s.append(svg('path', { d: 'M0 100L100 0', stroke: 'var(--line-strong)', 'stroke-width': '1', 'stroke-dasharray': '2 3', fill: 'none', 'vector-effect': 'non-scaling-stroke' }));
+  let drew = false;
+  for (const [k, color] of curves.reverse()) {
+    const p = a.props.find((x) => x.local === k && x.kind === 'struct');
+    const pts = curvePoints(p && p.node);
+    if (!pts) continue;
+    const identity = pts.every(([x, y]) => Math.abs(x - y) < 0.5);
+    if (identity && k !== 'ToneCurvePV2012') continue;
+    drew = true;
+    s.append(svg('polyline', { points: pts.map(([x, y]) => `${(x / 255) * 100},${100 - (y / 255) * 100}`).join(' '), fill: 'none', stroke: color, 'stroke-width': k === 'ToneCurvePV2012' ? '2' : '1.5', 'stroke-linejoin': 'round', 'vector-effect': 'non-scaling-stroke' }));
+  }
+  if (!drew) {
+    // No curve: draw a neutral tone ramp marker instead
+    s.append(svg('path', { d: 'M8 92 C 35 92, 45 10, 92 8', stroke: 'var(--accent)', 'stroke-width': '2', fill: 'none', 'vector-effect': 'non-scaling-stroke' }));
+  }
+  box.append(s);
+  return box;
+}
+
+function valueText(p) {
+  if (p.kind === 'attr') return truncate(p.value, 120) || '""';
+  if (p.local === 'Look') {
+    const l = lookInfo(p.node);
+    return `${l.name || 'Unnamed look'}${l.amount != null ? ' · ' + Math.round(l.amount * 1000) / 10 + '%' : ''}`;
+  }
+  const lis = p.node.getElementsByTagNameNS(NS.RDF, 'li').length;
+  const seq = p.node.getElementsByTagNameNS(NS.RDF, 'Seq').length;
+  if (/^ToneCurvePV2012/.test(p.local)) {
+    const pts = curvePoints(p.node);
+    return pts ? `${pts.length} points: ${truncate(pts.map((x) => x.join(',')).join('  '), 90)}` : 'curve';
+  }
+  if (seq) return `${lis} item${lis === 1 ? '' : 's'}`;
+  return 'structure';
+}
+
+function lookWarning(look) {
+  if (!look) return null;
+  const pct = look.amount != null ? `${Math.round(look.amount * 1000) / 10}%` : 'an unspecified amount';
+  return `This look references the Adobe profile '${look.name || 'unnamed'}' at ${pct}. Lightroom resolves built-in Adobe profiles automatically. If colors differ, apply that profile manually.`;
+}
+
+function alertEl(level, text) {
+  return h('li', { class: `alert ${level}` }, icon(level === 'err' ? 'err' : level === 'warn' ? 'warn' : 'info', 16), h('span', null, text));
+}
+
+function renderCard(it) {
+  els.empty.hidden = true;
+  const root = h('article', { class: 'card', 'aria-label': it.name });
+  it.ui = { root };
+  els.cards.append(root);
+  updateCard(it, true);
+}
+
+function statusPill(it) {
+  switch (it.status) {
+    case 'queued': return h('span', { class: 'pill line' }, 'Queued');
+    case 'reading': return h('span', { class: 'pill accent' }, `Reading${it.progress ? ' ' + Math.round(it.progress * 100) + '%' : '…'}`);
+    case 'choose': return h('span', { class: 'pill warn' }, 'Choose a packet');
+    case 'error': return h('span', { class: 'pill err' }, 'Error');
+    case 'cancelled': return h('span', { class: 'pill line' }, 'Cancelled');
+    default: return null;
+  }
+}
+
+/* Rebuilds structure when `full` (status/analysis change); otherwise refreshes counts & states in place. */
+function updateCard(it, full = false) {
+  const ui = it.ui;
+  if (!ui) return;
+  if (!full && ui.built === it.status) { refreshCardState(it); return; }
+  ui.built = it.status;
+  const root = ui.root;
+  root.className = 'card' + (it.status === 'error' ? ' is-error' : '');
+  const openDetails = ui.tableDetails && ui.tableDetails.open;
+  const openPreview = ui.previewDetails && ui.previewDetails.open;
+  root.replaceChildren();
+
+  // Head
+  const meta = h('div', { class: 'meta' });
+  ui.meta = meta;
+  const removeBtn = h('button', { class: 'btn icon sm ghost', type: 'button', 'aria-label': `Remove ${it.name}`, title: 'Remove', onclick: () => removeItem(it) }, icon('x', 16));
+  removeBtn.disabled = it.status === 'reading';
+  const headActions = h('div', { class: 'head-actions' });
+  ui.headActions = headActions;
+  root.append(h('div', { class: 'card-head' },
+    thumbFor(it),
+    h('div', { class: 'card-title' }, h('div', { class: 'fname', title: it.name }, baseName(it.name)), meta),
+    h('div', { class: 'head-actions' }, removeBtn)));
+
+  if (it.status === 'queued' || it.status === 'reading' || it.status === 'cancelled') { refreshCardState(it); return; }
+
+  const body = h('div', { class: 'card-body' });
+  root.append(body);
+
+  if (it.status === 'error') {
+    body.append(h('ul', { class: 'alerts' }, alertEl('err', it.error), ...(it.notes || []).map((n) => alertEl(n.level, n.text))));
+    refreshCardState(it);
+    return;
+  }
+
+  if (it.status === 'choose') {
+    const cands = it.extraction.candidates;
+    const list = h('div', { class: 'packets', role: 'radiogroup', 'aria-label': 'XMP packets with develop settings' });
+    cands.forEach((c, i) => {
+      const look = c.analysis.look;
+      list.append(h('label', { class: 'packet' },
+        h('input', { type: 'radio', name: `pk-${it.id}`, value: String(i), onchange: () => chooseCandidate(it, i) }),
+        h('span', null, h('b', null, `Packet ${i + 1}`), ` at byte ${fmtInt(c.offset)} · ${fmtBytes(c.length)} · ${c.analysis.supportedCount} settings${look && look.name ? ' · Look: ' + look.name : ''}${c.analysis.processVersion ? ' · PV ' + c.analysis.processVersion : ''}`)));
+    });
+    body.append(
+      h('ul', { class: 'alerts' },
+        alertEl('warn', `This file contains ${cands.length} different XMP packets with develop settings. The TIFF directory could not say which one belongs to the image, so pick one; nothing was chosen for you.`),
+        ...(it.notes || []).map((n) => alertEl(n.level, n.text))),
+      list);
+    refreshCardState(it);
+    return;
+  }
+
+  // Ready
+  const a = it.analysis;
+  const nameInput = h('input', { class: 'input', id: `pn-${it.id}`, type: 'text', value: it.presetName, maxlength: '200', autocomplete: 'off', spellcheck: 'false' });
+  nameInput.addEventListener('input', () => { it.presetName = nameInput.value; refreshAllCards(); refreshChrome(); });
+  ui.nameInput = nameInput;
+  ui.outname = h('div', { class: 'outname' });
+  body.append(h('div', { class: 'name-row' },
+    h('div', { class: 'field' }, h('label', { for: `pn-${it.id}` }, 'Preset name'), nameInput),
+    ui.outname));
+
+  // Alerts
+  const alerts = [];
+  if (a.look && GROUP_BY_ID.has('look')) alerts.push({ level: 'warn', text: lookWarning(a.look), group: 'look' });
+  if (a.cameraProfile === 'Embedded') alerts.push({ level: 'info', text: 'This DNG uses a camera profile embedded in the file. It cannot be carried in a preset, so it is excluded; Lightroom will use the target photo’s profile.' });
+  if (!a.processVersion) alerts.push({ level: 'warn', text: 'The source has no ProcessVersion, so the preset will not set one. Lightroom may interpret slider values with a different process version.' });
+  if (a.localAdjustments) alerts.push({ level: 'info', text: 'Masks and local adjustments in this file are image-specific and are not included.' });
+  if (a.duplicates.length) alerts.push({ level: 'warn', text: `Some settings appear more than once in the metadata (${truncate(a.duplicates.join(', '), 80)}). The first value of each was used.` });
+  for (const n of it.notes) alerts.push(n);
+  ui.alerts = h('ul', { class: 'alerts' });
+  ui.alertsStatic = alerts;
+  body.append(ui.alerts);
+
+  // Basic panel preview, drawn from the file's own values
+  ui.sliders = [];
+  const mini = h('div', { class: 'mini-body' });
+  for (const [key, label, min, max, grp] of SLIDERS) {
+    const prop = a.props.find((x) => x.local === key && x.kind === 'attr' && x.group === grp);
+    if (!prop) continue;
+    const row = sliderEl(label, prop.value, min, max);
+    ui.sliders.push({ row, group: grp });
+    mini.append(row);
+  }
+  if (ui.sliders.length) {
+    body.append(h('section', { class: 'mini', 'aria-label': 'Basic panel values in this file' },
+      h('div', { class: 'mini-head' }, 'Basic', h('span', null, 'values from this file')), mini));
+  }
+
+  // Group chips
+  ui.chips = new Map();
+  const chips = h('div', { class: 'chips', role: 'group', 'aria-label': 'Setting groups to include' });
+  const counts = groupCounts(a);
+  for (const g of GROUPS) {
+    const cb = h('input', { type: 'checkbox', 'aria-label': `${g.label}, ${counts.get(g.id) || 0} settings` });
+    cb.checked = it.on.has(g.id);
+    cb.addEventListener('change', () => toggleGroup(it, g.id, cb.checked));
+    const chip = h('label', { class: 'chip' + (counts.get(g.id) ? '' : ' is-empty') }, cb,
+      h('span', { class: 'box' }, icon('check', 11, 3.2)), g.label, h('span', { class: 'n' }, String(counts.get(g.id) || 0)));
+    ui.chips.set(g.id, cb);
+    chips.append(chip);
+  }
+  const applyAll = h('button', { class: 'btn sm ghost', type: 'button', onclick: () => applyGroupsToAll(it) }, 'Use these groups for all files');
+  body.append(h('div', null,
+    h('div', { class: 'groups-head' }, h('span', { class: 'label' }, 'Include in preset'), applyAll),
+    chips));
+
+  // Settings table
+  const tbody = h('tbody');
+  ui.rows = [];
+  ui.gheadBoxes = new Map();
+  const sections = [...GROUPS.map((g) => ({ id: g.id, label: g.label, toggle: true })),
+    { id: 'header', label: 'Preset header (copied from source)', toggle: false },
+    { id: 'image', label: 'Image-specific (always excluded)', toggle: false },
+    { id: 'unsupported', label: 'Unsupported / excluded', toggle: false }];
+  for (const sec of sections) {
+    const props = a.props.filter((p) => p.group === sec.id);
+    if (!props.length) continue;
+    let headInner;
+    if (sec.toggle) {
+      const cb = h('input', { type: 'checkbox' });
+      cb.checked = it.on.has(sec.id);
+      cb.addEventListener('change', () => toggleGroup(it, sec.id, cb.checked));
+      ui.gheadBoxes.set(sec.id, cb);
+      headInner = h('div', { class: 'ghead-inner' }, h('label', null, cb, sec.label), h('span', { class: 'n' }, String(props.length)));
+    } else {
+      headInner = h('div', { class: 'ghead-inner' }, h('span', null, sec.label), h('span', { class: 'n' }, String(props.length)));
+    }
+    tbody.append(h('tr', { class: 'ghead' }, h('th', { colspan: '3', scope: 'colgroup' }, headInner)));
+    for (const p of props) {
+      const st = h('td', { class: 's' });
+      const vCell = h('td', { class: 'v' }, valueText(p));
+      if (p.reason && (sec.id === 'image' || sec.id === 'unsupported')) vCell.append(h('span', { class: 'reason' }, p.reason));
+      const tr = h('tr', null, h('td', { class: 'k' }, 'crs:' + p.local), vCell, st);
+      ui.rows.push({ tr, st, p });
+      tbody.append(tr);
+    }
+  }
+  const table = h('table', { class: 'settings' },
+    h('thead', { class: 'sr-only' }, h('tr', null, h('th', { scope: 'col' }, 'Setting'), h('th', { scope: 'col' }, 'Value'), h('th', { scope: 'col' }, 'Status'))),
+    tbody);
+  ui.tableSub = h('span', { class: 'sub' });
+  ui.tableDetails = h('details', { class: 'more' },
+    h('summary', null, chev(), `All extracted values (${a.props.length})`, ui.tableSub),
+    h('div', { class: 'table-scroll' }, table));
+  if (openDetails) ui.tableDetails.open = true;
+
+  ui.pre = h('pre', { class: 'preview', tabindex: '0', 'aria-label': 'Preset XML preview' });
+  ui.previewDetails = h('details', { class: 'more' },
+    h('summary', null, chev(), 'Preview .xmp'),
+    ui.pre);
+  ui.previewDetails.addEventListener('toggle', () => refreshCardState(it));
+  if (openPreview) ui.previewDetails.open = true;
+  body.append(ui.tableDetails, ui.previewDetails);
+
+  // Footer
+  ui.valid = h('span', { class: 'valid' });
+  ui.dl = h('button', { class: 'btn primary', type: 'button', onclick: () => downloadOne(it) }, icon('dl', 16), 'Download .xmp');
+  body.append(h('div', { class: 'card-foot' }, ui.valid, h('div', { class: 'foot-actions' }, ui.dl)));
+  refreshCardState(it);
+}
+
+function groupCounts(a) {
+  const m = new Map();
+  for (const p of a.props) if (GROUP_BY_ID.has(p.group)) m.set(p.group, (m.get(p.group) || 0) + 1);
+  return m;
+}
+
+function exportProblem(it) {
+  if (it.status !== 'ready') return 'not ready';
+  if (!it.presetName.trim()) return 'Enter a preset name.';
+  if (!els.group.value.trim()) return 'Enter a group name.';
+  if (!selectedProps(it).length) return 'No settings selected. Turn on at least one group that has settings.';
+  return null;
+}
+
+function refreshCardState(it) {
+  const ui = it.ui;
+  if (!ui) return;
+  // meta pills
+  if (ui.meta) {
+    const pills = [];
+    const sp = statusPill(it);
+    if (sp) pills.push(sp);
+    if (it.status === 'ready') {
+      const a = it.analysis;
+      const sel = selectedProps(it).length;
+      pills.push(h('span', { class: 'pill ok' }, `${a.supportedCount} setting${a.supportedCount === 1 ? '' : 's'} found`));
+      pills.push(h('span', { class: 'pill' }, `${sel} selected`));
+      pills.push(h('span', { class: 'pill line', title: 'Detected profile / look' }, a.look ? `Look: ${a.look.name || 'unnamed'}` : (a.cameraProfile && a.cameraProfile !== 'Embedded' ? `Profile: ${a.cameraProfile}` : 'No look')));
+    }
+    if (it.extraction) pills.push(h('span', { class: 'pill line' }, it.extraction.method === 'tag' ? 'XMP tag 700' : 'Byte scan'));
+    if (it.size != null) pills.push(h('span', { class: 'pill line' }, fmtBytes(it.size)));
+    if (it.origin) pills.push(h('span', { class: 'pill line', title: it.origin }, `from ${truncate(it.origin, 28)}`));
+    ui.meta.replaceChildren(...pills);
+  }
+  if (it.status !== 'ready' || !ui.dl) return;
+
+  const lookOn = it.on.has('look');
+  ui.alerts.replaceChildren(...ui.alertsStatic.filter((x) => x.group !== 'look' || lookOn).map((x) => alertEl(x.level, x.text)));
+  const sel = selectedProps(it);
+  const deps = dependencies(it, sel);
+  for (const m of deps.messages) ui.alerts.append(alertEl(m.level, m.text));
+  ui.alerts.hidden = !ui.alerts.children.length;
+
+  for (const [id, cb] of ui.chips) cb.checked = it.on.has(id);
+  for (const sl of ui.sliders) sl.row.classList.toggle('is-off', !it.on.has(sl.group));
+  for (const [id, cb] of ui.gheadBoxes) cb.checked = it.on.has(id);
+  for (const r of ui.rows) {
+    const g = r.p.group;
+    let cls = '', label, pill;
+    if (GROUP_BY_ID.has(g)) {
+      if (it.on.has(g)) { label = 'Included'; pill = 'ok'; }
+      else { label = 'Off'; pill = 'line'; cls = 'is-off'; }
+    } else if (g === 'header') { label = 'Header'; pill = 'line'; }
+    else { label = 'Excluded'; pill = 'line'; cls = 'is-excl'; }
+    r.tr.className = cls;
+    r.st.replaceChildren(h('span', { class: 'pill ' + pill }, label));
+  }
+  ui.tableSub.textContent = `${sel.length} included`;
+
+  const names = assignFilenames();
+  ui.outname.textContent = '→ ' + (names.get(it.id) || '');
+  ui.nameInput.setAttribute('aria-invalid', it.presetName.trim() ? 'false' : 'true');
+
+  const problem = exportProblem(it);
+  ui.dl.disabled = !!problem;
+  if (problem) {
+    ui.valid.className = 'valid err';
+    ui.valid.replaceChildren(icon('warn', 14), problem);
+    if (ui.previewDetails.open) ui.pre.textContent = problem;
+  } else {
+    const built = buildPreset(it, els.group.value);
+    const v = validatePreset(built.xml, built.expect);
+    it.lastValid = v.ok;
+    ui.valid.className = 'valid ' + (v.ok ? 'ok' : 'err');
+    ui.valid.replaceChildren(icon(v.ok ? 'check' : 'warn', 14), v.ok ? 'XML structure validated' : `Validation failed: ${v.msg}`);
+    if (!v.ok) ui.dl.disabled = true;
+    if (ui.previewDetails.open) ui.pre.textContent = built.xml;
+  }
+}
+
+function refreshAllCards() { for (const it of state.items) if (it.status === 'ready') refreshCardState(it); }
+
+function toggleGroup(it, id, on) {
+  if (on) it.on.add(id); else it.on.delete(id);
+  refreshCardState(it);
+  refreshChrome();
+}
+function applyGroupsToAll(src) {
+  for (const it of state.items) if (it !== src) { it.on = new Set(src.on); if (it.status === 'ready') refreshCardState(it); }
+  addNotice(`Group selection from ${baseName(src.name)} applied to all files.`);
+  refreshChrome();
+}
+function removeItem(it) {
+  state.queue = state.queue.filter((t) => t.item !== it);
+  state.items = state.items.filter((x) => x !== it);
+  it.ui.root.remove();
+  if (!state.items.length) els.empty.hidden = false;
+  refreshAllCards();
+  refreshChrome();
+}
+
+function refreshProgress() {
+  const running = state.running;
+  els.progress.hidden = !running;
+  if (!running) return;
+  const { total, done } = state.batch;
+  const cur = state.current;
+  const curProg = cur && cur.item ? cur.item.progress || 0 : 0;
+  const pct = total ? Math.min(100, ((done + curProg) / total) * 100) : 0;
+  els.progressFill.style.width = pct.toFixed(1) + '%';
+  els.progressBar.setAttribute('aria-valuenow', String(Math.round(pct)));
+  const label = cur ? (cur.type === 'zip' ? `Opening ${cur.name}` : `Reading ${baseName(cur.name)}`) : 'Working';
+  els.progressText.textContent = state.cancel ? 'Cancelling…' : `${Math.min(done + 1, total)} of ${total} · ${label}`;
+}
+
+function refreshChrome() {
+  refreshProgress();
+  const ready = state.items.filter((x) => x.status === 'ready');
+  const exportable = ready.filter((x) => !exportProblem(x) && x.lastValid !== false);
+  const errors = state.items.filter((x) => x.status === 'error').length;
+  const choose = state.items.filter((x) => x.status === 'choose').length;
+  const parts = [];
+  if (!state.items.length) parts.push('No files yet');
+  else {
+    parts.push(`${state.items.length} file${state.items.length === 1 ? '' : 's'}`);
+    parts.push(`${ready.length} ready`);
+    if (choose) parts.push(`${choose} need a choice`);
+    if (errors) parts.push(`${errors} with errors`);
+  }
+  els.summary.textContent = parts.join(' · ');
+  els.zip.disabled = state.running || exportable.length === 0;
+  els.clear.disabled = state.running || state.items.length === 0;
+  els.drop.setAttribute('aria-busy', state.running ? 'true' : 'false');
+  const g = els.group.value.trim();
+  els.group.setAttribute('aria-invalid', g ? 'false' : 'true');
+  els.groupHint.textContent = g ? 'The preset folder Lightroom files these under.' : 'Enter a group name; presets need one.';
+  els.groupHint.className = 'hint' + (g ? '' : ' err');
+}
+
+/* =========================================================================
+   Downloads
+   ========================================================================= */
+function downloadOne(it) {
+  if (exportProblem(it)) return;
+  const built = buildPreset(it, els.group.value);
+  const v = validatePreset(built.xml, built.expect);
+  if (!v.ok) { refreshCardState(it); return; }
+  const name = assignFilenames().get(it.id);
+  downloadBlob(new Blob([built.xml], { type: 'application/octet-stream' }), name);
+}
+
+async function downloadAll() {
+  const names = assignFilenames();
+  const files = [];
+  let skipped = 0;
+  for (const it of state.items) {
+    if (it.status !== 'ready' || exportProblem(it)) { if (it.status === 'ready') skipped++; continue; }
+    const built = buildPreset(it, els.group.value);
+    if (!validatePreset(built.xml, built.expect).ok) { skipped++; continue; }
+    files.push([names.get(it.id), built.xml]);
+  }
+  if (!files.length) return;
+  els.zip.disabled = true;
+  try {
+    const JSZip = await loadJSZip();
+    const zip = new JSZip();
+    for (const [n, xml] of files) zip.file(n, xml, { date: new Date() });
+    const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 }, mimeType: 'application/zip' });
+    downloadBlob(blob, sanitizeFilename(els.group.value.trim() || 'presets') + '.zip');
+    addNotice(`Zipped ${files.length} preset${files.length === 1 ? '' : 's'}${skipped ? `; ${skipped} skipped because nothing exportable was selected` : ''}.`);
+  } catch (e) {
+    addNotice(e instanceof UserError ? e.message : 'Could not create the ZIP: ' + (e && e.message));
+  } finally {
+    refreshChrome();
+  }
+}
+
+/* =========================================================================
+   Events
+   ========================================================================= */
+els.pick.addEventListener('click', () => els.input.click());
+els.input.addEventListener('change', () => { if (els.input.files.length) addFiles([...els.input.files]); els.input.value = ''; });
+let dragDepth = 0;
+const hasFiles = (e) => e.dataTransfer && [...(e.dataTransfer.types || [])].includes('Files');
+window.addEventListener('dragover', (e) => { if (hasFiles(e)) e.preventDefault(); });
+window.addEventListener('drop', (e) => { if (hasFiles(e)) e.preventDefault(); });
+els.drop.addEventListener('dragenter', (e) => { if (!hasFiles(e)) return; e.preventDefault(); dragDepth++; els.drop.classList.add('over'); });
+els.drop.addEventListener('dragover', (e) => { if (!hasFiles(e)) return; e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; });
+els.drop.addEventListener('dragleave', () => { dragDepth = Math.max(0, dragDepth - 1); if (!dragDepth) els.drop.classList.remove('over'); });
+els.drop.addEventListener('drop', (e) => {
+  e.preventDefault(); dragDepth = 0; els.drop.classList.remove('over');
+  const files = e.dataTransfer && e.dataTransfer.files ? [...e.dataTransfer.files] : [];
+  if (files.length) addFiles(files);
+});
+els.cancel.addEventListener('click', () => { if (state.running) { state.cancel = true; refreshProgress(); } });
+els.group.addEventListener('input', () => { refreshAllCards(); refreshChrome(); });
+els.zip.addEventListener('click', downloadAll);
+els.clear.addEventListener('click', () => {
+  if (state.running) return;
+  for (const it of state.items) it.ui.root.remove();
+  state.items = [];
+  els.notices.replaceChildren();
+  els.empty.hidden = false;
+  refreshChrome();
+});
+
+/* Theme: auto → light → dark */
+const THEMES = ['dark', 'light', 'auto'];
+function applyTheme(t) {
+  document.documentElement.dataset.theme = t;
+  els.theme.replaceChildren(icon(t === 'light' ? 'sun' : t === 'dark' ? 'moon' : 'auto', 18, 1.8));
+  els.theme.setAttribute('aria-label', `Theme: ${t}. Switch theme`);
+  els.theme.title = `Theme: ${t}`;
+}
+let theme = 'dark';
+try { theme = localStorage.getItem('dng2xmp-theme') || 'dark'; } catch {}
+if (!THEMES.includes(theme)) theme = 'dark';
+applyTheme(theme);
+els.theme.addEventListener('click', () => {
+  theme = THEMES[(THEMES.indexOf(theme) + 1) % THEMES.length];
+  applyTheme(theme);
+  try { localStorage.setItem('dng2xmp-theme', theme); } catch {}
+});
+
+/* Hero: Basic panel sample; thumbs settle once on load, hover shows the written attribute */
+{
+  const sample = [['Tone', null], ['Exposure', '+0.35', -5, 5, 'Exposure2012'], ['Contrast', '+24', -100, 100, 'Contrast2012'],
+    ['Highlights', '-62', -100, 100, 'Highlights2012'], ['Shadows', '+41', -100, 100, 'Shadows2012'],
+    ['Whites', '+12', -100, 100, 'Whites2012'], ['Blacks', '-18', -100, 100, 'Blacks2012'],
+    ['Presence', null], ['Clarity', '+10', -100, 100, 'Clarity2012'], ['Vibrance', '+14', -100, 100, 'Vibrance'], ['Saturation', '-8', -100, 100, 'Saturation']];
+  const body = $('devBody'), code = $('devCode');
+  const rows = [];
+  const show = (row) => {
+    for (const r of rows) r.classList.toggle('on', r === row);
+    code.replaceChildren(h('span', { class: 'k' }, 'crs:' + row.key), `="${row.val}"`);
+  };
+  for (const [label, val, min, max, key] of sample) {
+    if (val == null) { body.append(h('div', { class: 'dev-sub' }, label)); continue; }
+    const row = sliderEl(label, val, min, max);
+    row.key = key; row.val = val;
+    row.setPos(0.5);
+    row.addEventListener('mouseenter', () => show(row));
+    rows.push(row);
+    body.append(row);
+  }
+  show(rows[1]);
+  requestAnimationFrame(() => requestAnimationFrame(() => { for (const r of rows) r.setPos(r.target); }));
+}
+for (const [k, v] of LIMIT_ROWS) els.limits.append(h('li', null, h('span', null, k), h('b', null, v)));
+if (window.JSZip) {
+  $('privacyText').textContent = 'Images are read and converted in this tab and never uploaded. This offline build embeds JSZip 3.10.1, so the page makes no network requests.';
+  $('offlineText').hidden = true;
+}
+refreshChrome();
+})();
+</script>
+</body>
+</html>
